@@ -1,0 +1,81 @@
+{
+    "$schema": "http://json-schema.org/draft-06/schema#",
+    "$ref": "#/definitions/header",
+    "definitions": {
+        "header": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "firstName": {
+                    "type": "string"
+                },
+                "lastName": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "integer"
+                },
+                "address": {
+                    "$ref": "#/definitions/Address"
+                },
+                "phoneNumber": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/PhoneNumber"
+                    }
+                }
+            },
+            "required": [
+                "address",
+                "age",
+                "firstName",
+                "lastName",
+                "phoneNumber"
+            ],
+            "title": "Header"
+        },
+        "Address": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "streetAddress": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string",
+                    "format": "integer"
+                }
+            },
+            "required": [
+                "city",
+                "postalCode",
+                "state",
+                "streetAddress"
+            ],
+            "title": "Address"
+        },
+        "PhoneNumber": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "number",
+                "type"
+            ],
+            "title": "PhoneNumber"
+        }
+    }
+}

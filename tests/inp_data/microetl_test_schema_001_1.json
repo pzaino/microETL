@@ -1,0 +1,25 @@
+{
+    "$id": "https://example.com/person.schema.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Person",
+    "type": "object",
+    "required": [
+        "fullName",
+        "city"
+    ],
+    "properties": {
+        "fullName": {
+        "type": "string",
+        "description": "The person's full name."
+        },
+        "age": {
+        "description": "Age in years which must be equal to or greater than zero.",
+        "type": "integer",
+        "minimum": 0
+        },
+        "city": {
+        "type": "string",
+        "description": "The city where the person lives."
+        }
+    }
+}

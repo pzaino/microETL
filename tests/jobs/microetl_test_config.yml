@@ -1,0 +1,49 @@
+---
+# A test yaml configuration file
+description: Test file for microetl
+version: 0.0.1
+datasources:
+  source:
+    db_type: none
+    host: localhost
+    port: 5432
+    user: postgres
+    password: 
+    database: TestDB
+  destination:
+    db_type: json
+    host: localhost
+    port: 
+    user: 
+    password:
+    database: ./tests/data/file_test_data.json
+    protocol: file
+schemas:
+  source: 
+    name: microetl_test_schema.json
+    description: "A test (old) JSON schema"
+    type: none
+  destination:
+    name: microetl_test_schema.json
+    description: "A test (new) JSON schema"
+    type: json
+actions:
+  source:
+    name: microetl_test_table fetch data
+    description: "A test table"
+    type: SQL
+    template: src_query001.sql
+    parameters: 
+      - name: param1
+        value: 1
+      - name: param2
+        value: 2
+  destination:
+    name: microetl_test_table process data
+    description: "Converting JSOn data from an old JSON format to a new one"
+    type: json
+    mapping: json1_to_json2.py
+    template: 
+    parameters:
+author: me
+published: true
