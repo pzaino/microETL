@@ -1,6 +1,6 @@
 # microETL
 
-A library and framework for data transformation using multiple data sources, DSL and multiple data destinations.
+A library and framework for data transformation, ETL (Extract, Transform and Load) and data migration using multiple data sources, DSL and multiple data destinations.
 
 ## Installation
 
