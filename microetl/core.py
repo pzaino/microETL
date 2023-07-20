@@ -35,12 +35,15 @@ from jsonschema.exceptions import ValidationError
 
 # Import yaml library to read and write YAML data
 import yaml
+from yamlinclude import YamlIncludeConstructor
+
+# Import jinja2 library to allow for templating
+from jinja2.environment import Template, Environment
+from jinja2.runtime import Undefined 
+from jinja2.loaders import DictLoader
 
 # Import jinjaSQL library to allow for parameterized SQL queries
 from jinjasql import JinjaSql
-
-# Import jinja2 library to allow for templating
-from jinja2 import Template, Undefined, Environment
 
 #add the following from graphql_compiler import graphql_to_sql
 
@@ -52,7 +55,7 @@ import microetl.dbconn.interface as dbc
 import microetl.apiclient as apic
 
 # Globals
-debug_level = 0
+debug_level = 1
 
 # Error Messages
 err_msg = [
@@ -138,7 +141,14 @@ def read_config_file(config_file):
         with open(config_file, 'r') as file:
             config_raw = file.read()
         t = Template(config_raw, undefined=Undefined)
-        config = yaml.safe_load(t.render(os.environ))
+        config = yaml.load(t.render(os.environ), Loader=yaml.FullLoader)
+
+        if debug_level > 1:
+          test = json.dumps(config, indent=2)
+          print("-- Config (in read_config_file): ")
+          print(test)
+          print("--")
+
         return config
     except Exception as e:
         logging.error(err_msg[3] + str(e))
@@ -258,39 +268,70 @@ def get_data_from_db(config, inp_path, datasource_type: str = 'postgres', sectio
         
         # Get the query to run
         query = config.get('actions').get(section_name).get('template')
+        if query == None or query == '':
+            query = config.get('actions').get(section_name).get('query')
+        else:
+            query = read_sql_query(os.path.join(inp_path, query))
+
+        if query == None or query == '':
+            raise ValueError("Invalid query: '" + str(query) + "' for section: " + section_name + ". template cannot be empty!")
 
         # Get the query parameters
-        query_params = config.get('actions').get(section_name).get('params')
-        if query_params == None and query_params == '':
-            query_params = os.environ
+        query_params = config.get('actions').get(section_name).get('query_params')
+        if query_params == None or query_params == '':
+            query_params = config.get('actions').get(section_name).get('query_parameters')
+        if query_params == None or query_params == '':
+            query_params = config.get('actions').get(section_name).get('parameters')
+        if query_params == None or query_params == '':
+            query_params = config.get('actions').get(section_name).get('params')
+
+        if debug_level > 1:
+            print("-- Query params (in read_data_from_db): ")
+            print(query_params)
+            print("--")
 
         # Process query and parameters
-        query = replace_sql_parameters(config, inp_path, query, section_name, query_params)
+        query, query_params = replace_sql_parameters(config, inp_path, query, section_name, query_params)
 
-        # Get the database connection
-        conn = dbc.get_db_connection(config, section_name)
+        if debug_level > 1:
+            print("-- Query processed (in read_data_from_db): ")
+            print(query)
+            print("--")
+        
+        if query != None and query != '':
+            # Get the database connection
+            conn = dbc.get_db_connection(config, section_name)
 
-        # Get the Cursor
-        cur = dbc.get_db_cursor(conn, ds_type)
+            # Get the Cursor
+            cur = dbc.get_db_cursor(conn, ds_type)
 
-        # Get the type of action to perform
-        action_type = config.get('actions').get(section_name).get('type').lower().strip()
+            # Get the type of action to perform
+            action_type = config.get('actions').get(section_name).get('type').lower().strip()
 
-        # Execute the query
-        if action_type == 'sql_to_dataframe':
-            data = dbc.execute_db_query_return_dataframe(conn, cur, query, ds_type)
-        elif action_type == 'sql_to_results':
-            data = dbc.execute_db_query_return_results(conn, cur, query, ds_type)
+            if debug_level > 1:
+                print("-- Action type (in read_data_from_db): ")
+                print(action_type)
+                print("--")
+
+            # Execute the query
+            if action_type == 'sql_to_dataframe':
+                data = dbc.execute_db_query_return_dataframe(conn, cur, query, ds_type, query_params)
+            elif action_type == 'sql_to_results':
+                data = dbc.execute_db_query_return_results(conn, cur, query, ds_type, query_params)
+            elif action_type == 'sql_to_json':
+                data = dbc.execute_db_query_return_json(conn, cur, query, ds_type, query_params)
+            else:
+                data = None
+
+            # Close the cursor
+            dbc.close_db_cursor(cur, ds_type)
+
+            # Close the connection
+            dbc.close_db_connection(conn, ds_type)
+
+            return data
         else:
-            data = None
-
-        # Close the cursor
-        dbc.close_db_cursor(cur, ds_type)
-
-        # Close the connection
-        dbc.close_db_connection(conn, ds_type)
-
-        return data
+            return None
     except Exception as e:
         logging.error(err_msg[13] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
@@ -318,20 +359,77 @@ def replace_sql_parameters(config, inp_path, sql_query, section_name, parameters
     Replace the SQL Parameters
     :param config: Configuration
     :param sql_query: SQL Query
+    :param section_name: Section Name of the config where to find the parameters
     :param parameters: Parameters
     :return: SQL Query with the Parameters replaced
     """
     try:
         # Retrieve parameters from the configuration file
-        parameters = config.get('actions').get(section_name).get('parameters')
-        if parameters is None:
-            parameters = os.environ
+        if parameters == None or parameters == []:
+            parameters = config.get('actions').get(section_name).get('parameters')
+
+        #if parameters != None and parameters != []:
+            # Loop through the parameters
+            #for parameter in parameters:
+            #    if parameter.get('name').lower().strip() == 'parameters_file' or parameter.get('name').lower().strip() == 'file':
+            #        if parameter.get('value') != None:
+            #            par_filename = os.path.join(inp_path,  parameter['value']) 
+            #            with open(par_filename, 'r') as par_file:
+            #                par_data = yaml.safe_load(par_file)
+            #                parameters.update(par_data)
+            #        else:
+            #            for idx, obj in enumerate(parameters):
+            #                if obj['name'] == parameter.get('name'):
+            #                    parameters.pop(idx)
+
+        if debug_level > 1:
+            print("-- Parameters processed (in replace_sql_parameters): ")
+            print(parameters)
+            print("--")
+
+        if parameters is None or parameters == []:
+            return sql_query
+
+        # Create a dictionary of parameters
+        pyval_prefix = 'pyval('
+        pyval_suffix = ')'
+        par_dict = {}
+        for idx, obj in enumerate(parameters):
+            res = obj['name']
+            if obj['name'].lower().strip().startswith(pyval_prefix):
+                par = obj['name']
+                res = ''.join(par.split(pyval_prefix)[1].split(pyval_suffix)[0])
+                val = str(eval(obj['value'])).strip().replace("'", "").replace('"', '').replace(' ', '')
+                parameters[idx]['value'] = val
+            par_dict[res]=obj['value']
+            
+        yaml_dict = yaml.safe_load(str(par_dict))
+
+        if debug_level > 1:
+            print("-- Parameters dictionary (in replace_sql_parameters): ")
+            print(yaml_dict)
+            print("--")
 
         # Create a JinjaSql object
-        j = JinjaSql()
-        query, bind_params = j.prepare_query(sql_query, parameters)
+        loader = DictLoader({"params" : yaml_dict})
 
-        return query
+        if debug_level > 1:
+            print("-- Loader (in replace_sql_parameters): ")
+            print(loader.mapping)
+            print("--")
+
+        j = JinjaSql(param_style='pyformat')
+        query, bind_params = j.prepare_query(j.env.from_string(sql_query), loader.mapping)
+
+        if debug_level > 1:
+            print("-- Query (in replace_sql_parameters): ")
+            print(query)
+            print("--")
+            print("-- Params (in replace_sql_parameters): ")
+            print(bind_params)
+            print("--")
+
+        return query, bind_params
     except Exception as e:
         logging.error(err_msg[5] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
@@ -364,9 +462,12 @@ def process_config_parameters(config, inp_path, section_name, parameters):
             template = env.from_string(str(parameters))
             # Render the Template
             tmp_pars = yaml.safe_load(template.render(os.environ))
-        if debug_level > 0:
-            print("Processed parameters: ")
+
+        if debug_level > 1:
+            print("-- Processed parameters (in process_config_parameters): ")
             print(tmp_pars)
+            print("--")
+
         return tmp_pars
     except Exception as e:
         logging.error(err_msg[4] + str(e))
@@ -410,7 +511,8 @@ def process_data(config, inp_path, sect_name, data):
         elif action_type == 'read':
             data = read_data_from_ds(config, parameters.get('datasource_type'), parameters.get('input_data_path'), sect_name)
         elif action_type == 'sql':
-            data = read_data_from_db(config, replace_sql_parameters(config, inp_path, read_sql_query(parameters.get('sql_query_file')), sect_name, parameters))
+            query, query_params = replace_sql_parameters(config, inp_path, read_sql_query(parameters.get('sql_query_file')), sect_name, parameters)
+            data = read_data_from_db(config, query, query_params)
         elif action_type == 'api':
             data = read_data_from_api(config, parameters.get('input_data_path'))
         elif action_type == 'no_action':
@@ -680,11 +782,12 @@ def write_data_to_ds(config, data, parameters):
 
 # Function to read the Data from a Database
 # and return a DataFrame
-def read_data_from_db(config, sql_query):
+def read_data_from_db(config, sql_query, sql_params=None):
     """
     Read the Data from the Database
     :param config: Configuration
     :param sql_query: SQL Query
+    :param sql_params: SQL Parameters
     :return: Data
     """
     try:
@@ -693,7 +796,7 @@ def read_data_from_db(config, sql_query):
         # Get the DB Cursor
         db_cursor = dbc.get_db_cursor(db_connection, config['db_type'])
         # Execute the SQL Query and get the Data
-        data = dbc.execute_db_query_return_dataframe(db_connection, db_cursor, sql_query, config['db_type'])
+        data = dbc.execute_db_query_return_dataframe(db_connection, db_cursor, sql_query, config['db_type'], sql_params)
         # Close the DB Connection
         #if config['db_type'] != 'none':
         #    db_connection.close()
@@ -958,6 +1061,7 @@ def etleng_run_pipeline(config, inp_path, out_path):
     :param out_path: Output Data path (if any)
     :return: None
     """
+    
     try:
         # Process configuration file
         src_ds: str = ''
@@ -981,8 +1085,9 @@ def etleng_run_pipeline(config, inp_path, out_path):
         # Read the Data from the Source
         data = read_data_from_ds(config, str(src_ds), str(inp_path), "source")
         if debug_level > 0:
-            print("Data from source :")
+            print("-- Data from source (in etleng_run_pipeline):")
             print(data)
+            print("--")
 
         # Transform the Data to the new format:
 
@@ -1002,7 +1107,7 @@ def etleng_run_pipeline(config, inp_path, out_path):
         return False
 
 # Function that loads a pipeline configuration file and run the ETL pipeline
-def etleng_run_pipeline_from_config(config_file, cfg_path: str, inp_path: str, out_path: str):
+def etleng_run_pipeline_from_config(config_file, base_path: str, cfg_path: str, inp_path: str, out_path: str):
     """
     Run the ETL Pipeline from a Configuration File
     :param config_file: Configuration File
@@ -1014,8 +1119,14 @@ def etleng_run_pipeline_from_config(config_file, cfg_path: str, inp_path: str, o
     try:
         if debug_level > 0:
             print('Loading config file: ' + config_file)
+
+        # Add the !include constructor to the yaml loader
+        # which will use for base_path the parent path to the directory that contains 
+        # the jobs configuration file
+        YamlIncludeConstructor.add_to_loader_class(loader_class=yaml.FullLoader, base_dir=base_path)
+
         # Read the Configuration File
-        config = read_config_file(cfg_path + "/" + config_file)
+        config = read_config_file(os.path.join(cfg_path, config_file))
         # Check if the input path is provided in the configuration file
         if config.get('datasources').get('source').get('local_input_data') != None:
             inp_path = str(config.get('datasources').get('source').get('local_input_data'))

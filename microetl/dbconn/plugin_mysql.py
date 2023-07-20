@@ -99,7 +99,7 @@ def close_cursor(cur):
         sys.exit(1)
 
 # function that executes a query on the mysql database
-def exec_query(conn, cur, query):
+def exec_query(conn, cur, query, query_params = None):
     """
     Execute MySQL Query
     :param conn: MySQL Connection Object
@@ -109,7 +109,7 @@ def exec_query(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -119,7 +119,7 @@ def exec_query(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the mysql database and returns the results
-def exec_query_return_results(conn, cur, query):
+def exec_query_return_results(conn, cur, query, query_params = None):
     """
     Execute MySQL Query and Return Results
     :param conn: MySQL Connection Object
@@ -129,7 +129,7 @@ def exec_query_return_results(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
@@ -142,7 +142,7 @@ def exec_query_return_results(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the mysql database and returns the results as a dataframe
-def exec_query_return_dataframe(conn, cur, query):
+def exec_query_return_dataframe(conn, cur, query, query_params = None):
     """
     Execute MySQL Query and Return Dataframe
     :param conn: MySQL Connection Object
@@ -152,13 +152,39 @@ def exec_query_return_dataframe(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
-        results = cur.fetchall()
-        # Convert the results to a dataframe
-        df = pd.DataFrame(results)
-        return df
+        results = pd.DataFrame(cur.fetchall())
+        results.columns=[ x.name for x in cur.description ]
+        return results
+    except mysql.Connect.Error as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format
+                        (traceback.format_exc()))
+        conn.rollback()
+        sys.exit(1)
+
+# Function that executes a Postgres query and returns the results as a JSON object
+def exec_query_return_json(conn, cur, query, query_params=None):
+    """
+    Execute Postgres Query and Return JSON Object
+    :param conn: Postgres Connection Object
+    :param cur: Postgres Cursor Object
+    :param query: Query to execute
+    :param query_params: Query Parameters
+    :return: JSON Object
+    """
+    try:
+        # Execute the query
+        cur.execute(query, query_params)
+        conn.commit()
+        # Fetch the results
+        results = pd.DataFrame(cur.fetchall())
+        results.columns=[ x.name for x in cur.description ]
+        # Convert the results to a JSON object
+        json_data = results.to_json(orient = 'records')
+        return json_data
     except mysql.Connect.Error as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format

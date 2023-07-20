@@ -185,7 +185,7 @@ def close_db_cursor(cur, db_type):
         sys.exit(1)
 
 # function that executes a query on the database (using one of the available plugins)
-def execute_db_query(conn, cur, query, db_type):
+def execute_db_query(conn, cur, query, db_type, query_params=None):
     """
     Execute Database Query
     :param conn: Database Connection Object
@@ -201,17 +201,17 @@ def execute_db_query(conn, cur, query, db_type):
         if db_type == 'none':
             return None
         elif db_type == 'snowflake':
-            sf.exec_query(conn, cur, query)
+            sf.exec_query(conn, cur, query, query_params)
         elif db_type == 'postgres':
-            postgres.exec_query(conn, cur, query)
+            postgres.exec_query(conn, cur, query, query_params)
         elif db_type == 'neo4j':
-            neo4j.exec_query(conn, cur, query)
+            neo4j.exec_query(conn, cur, query, query_params)
         #elif db_type == 'mysql':
-        #    _execute_mysql_query(conn, cur, query)
+        #    _execute_mysql_query(conn, cur, query, query_params)
         elif db_type == 'elasticsearch':
-            es.exec_query(conn, cur, query)
+            es.exec_query(conn, cur, query, query_params)
         elif db_type == 'mongodb':
-            mongodb.exec_query(conn, cur, query)
+            mongodb.exec_query(conn, cur, query, query_params)
         else:
             logging.error(erx.msg[1])
             sys.exit(1)
@@ -223,7 +223,7 @@ def execute_db_query(conn, cur, query, db_type):
 
 # function that executes a query on the database (using one of the available plugins) 
 # and returns the results
-def execute_db_query_return_results(conn, cur, query, db_type):
+def execute_db_query_return_results(conn, cur, query, db_type, query_params=None):
     """
     Execute Database Query and Return Results
     :param conn: Database Connection Object
@@ -239,17 +239,17 @@ def execute_db_query_return_results(conn, cur, query, db_type):
         if db_type == 'none':
             return None
         elif db_type == 'snowflake':
-            return sf.exec_query_return_results(conn, cur, query)
+            return sf.exec_query_return_results(conn, cur, query, query_params)
         elif db_type == 'postgres':
-            return postgres.exec_query_return_results(conn, cur, query)
+            return postgres.exec_query_return_results(conn, cur, query, query_params)
         #elif db_type == 'mysql':
-        #    return _execute_mysql_query_return_results(conn, cur, query)
+        #    return _execute_mysql_query_return_results(conn, cur, query, query_params)
         elif db_type == 'elasticsearch':
-            return es.exec_query_return_results(conn, cur, query)
+            return es.exec_query_return_results(conn, cur, query, query_params)
         elif db_type == 'mongodb':
-            return mongodb.exec_query_return_results(conn, cur, query)
+            return mongodb.exec_query_return_results(conn, cur, query, query_params)
         elif db_type == 'neo4j':
-            return neo4j.exec_query_return_results(conn, cur, query)
+            return neo4j.exec_query_return_results(conn, cur, query, query_params)
         else:
             logging.error(erx.msg[1])
             sys.exit(1)
@@ -261,7 +261,7 @@ def execute_db_query_return_results(conn, cur, query, db_type):
 
 # function that executes a query on the database (using one of the available plugins) 
 # and returns the results as a dataframe
-def execute_db_query_return_dataframe(conn, cur, query, db_type):
+def execute_db_query_return_dataframe(conn, cur, query, db_type, query_params=None):
     """
     Execute Database Query and Return Dataframe
     :param conn: Database Connection Object
@@ -277,17 +277,17 @@ def execute_db_query_return_dataframe(conn, cur, query, db_type):
         if db_type == 'none':
             return None
         elif db_type == 'snowflake':
-            return sf.exec_query_return_dataframe(conn, cur, query)
+            return sf.exec_query_return_dataframe(conn, cur, query, query_params)
         elif db_type == 'postgres':
-            return postgres.exec_query_return_dataframe(conn, cur, query)
+            return postgres.exec_query_return_dataframe(conn, cur, query, query_params)
         #elif db_type == 'mysql':
-        #    return _execute_mysql_query_return_dataframe(conn, cur, query)
+        #    return _execute_mysql_query_return_dataframe(conn, cur, query, query_params)
         elif db_type == 'neo4j':
-            return neo4j.exec_query_return_dataframe(conn, cur, query)
+            return neo4j.exec_query_return_dataframe(conn, cur, query, query_params)
         elif db_type == 'mongodb':
-            return mongodb.exec_query_return_dataframe(conn, cur, query)
+            return mongodb.exec_query_return_dataframe(conn, cur, query, query_params)
         elif db_type == 'elasticsearch':
-            return es.exec_query_return_dataframe(conn, cur, query)
+            return es.exec_query_return_dataframe(conn, cur, query, query_params)
         else:
             logging.error(erx.msg[1])
             sys.exit(1)
@@ -298,7 +298,7 @@ def execute_db_query_return_dataframe(conn, cur, query, db_type):
         sys.exit(1)
 
 # Function that runs a query and returns the results as a JSON object
-def execute_db_query_return_json(conn, cur, query, db_type):
+def execute_db_query_return_json(conn, cur, query, db_type, query_params=None):
     """
     Execute Database Query and Return JSON
     :param conn: Database Connection Object
@@ -314,17 +314,17 @@ def execute_db_query_return_json(conn, cur, query, db_type):
         if db_type == 'none':
             return None
         elif db_type == 'snowflake':
-            return sf.exec_query_return_json(conn, cur, query)
+            return sf.exec_query_return_json(conn, cur, query, query_params)
         elif db_type == 'postgres':
-            return postgres.exec_query_return_json(conn, cur, query)
+            return postgres.exec_query_return_json(conn, cur, query, query_params)
         #elif db_type == 'mysql':
-        #    return _execute_mysql_query_return_json(conn, cur, query)
+        #    return _execute_mysql_query_return_json(conn, cur, query, query_params)
         elif db_type == 'elasticsearch':
-            return es.exec_query_return_json(conn, cur, query)
+            return es.exec_query_return_json(conn, cur, query, query_params)
         elif db_type == 'mongodb':
-            return mongodb.exec_query_return_json(conn, cur, query)
+            return mongodb.exec_query_return_json(conn, cur, query, query_params)
         elif db_type == 'neo4j':
-            return neo4j.exec_query_return_json(conn, cur, query)
+            return neo4j.exec_query_return_json(conn, cur, query, query_params)
         else:
             logging.error(erx.msg[1])
             sys.exit(1)

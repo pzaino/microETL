@@ -24,10 +24,13 @@ def strip_dangerous_characters(string, str_type: str = 'username'):
     """
     try:
         str_type = str_type.lower().strip(' ')
-        if str_type == 'username' or str_type == 'user' or str_type == 'password':
-            return string.replace('\'', '').replace('"', '').replace(' ', '')
+        if string != None and string != '':
+            if str_type == 'username' or str_type == 'user' or str_type == 'password':
+                return string.replace('\'', '').replace('"', '').replace(' ', '')
+            else:
+                return string.replace('\'', '').replace('"', '').strip(' ')
         else:
-            return string.replace('\'', '').replace('"', '').strip(' ')
+            return ''
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format(traceback.format_exc()))

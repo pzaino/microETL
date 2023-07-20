@@ -105,7 +105,7 @@ def close_cursor(cur):
         sys.exit(1)
 
 # function that executes a query on the neo4j database
-def exec_query(conn, cur, query):
+def exec_query(conn, cur, query, query_params=None):
     """
     Execute Neo4J Query
     :param conn: Neo4J Connection Object
@@ -115,7 +115,7 @@ def exec_query(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -125,7 +125,7 @@ def exec_query(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the neo4j database and returns the results
-def exec_query_return_results(conn, cur, query):
+def exec_query_return_results(conn, cur, query, query_params=None):
     """
     Execute Neo4j Query and Return Results
     :param conn: Neo4j Connection Object
@@ -135,7 +135,7 @@ def exec_query_return_results(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
@@ -148,7 +148,7 @@ def exec_query_return_results(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the neo4j database and returns the results as a dataframe
-def exec_query_return_dataframe(conn, cur, query):
+def exec_query_return_dataframe(conn, cur, query, query_params=None):
     """
     Execute Neo4j Query and Return Dataframe
     :param conn: Neo4j Connection Object
@@ -158,13 +158,12 @@ def exec_query_return_dataframe(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
-        results = cur.fetchall()
-        # Convert the results to a dataframe
-        df = pd.DataFrame(results)
-        return df
+        results = pd.DataFrame(cur.fetchall())
+        results.columns=[ x.name for x in cur.description ]
+        return results
     except neo4j.exceptions.ClientError as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format
@@ -177,7 +176,7 @@ def exec_query_return_dataframe(conn, cur, query):
         sys.exit(1)
 
 # Function that executes a neo4j query and returns the results as a JSON object
-def exec_query_return_json(conn, cur, query):
+def exec_query_return_json(conn, cur, query, query_params=None):
     """
     Execute Neo4j Query and Return JSON
     :param conn: Neo4j Connection Object
@@ -187,7 +186,7 @@ def exec_query_return_json(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
