@@ -9,6 +9,8 @@
 # Import Libraries
 import os
 import sys
+sys.path.append("./")
+sys.path.append("./dbconn")
 import logging
 import traceback
 import datetime
@@ -33,20 +35,28 @@ from jsonschema.exceptions import ValidationError
 
 # Import yaml library to read and write YAML data
 import yaml
+from yamlinclude import YamlIncludeConstructor
+
+# Import jinja2 library to allow for templating
+from jinja2.environment import Template, Environment
+from jinja2.runtime import Undefined 
+from jinja2.loaders import DictLoader
 
 # Import jinjaSQL library to allow for parameterized SQL queries
 from jinjasql import JinjaSql
-
-# Import jinja2 library to allow for templating
-from jinja2 import Template, Undefined
 
 #add the following from graphql_compiler import graphql_to_sql
 
 # Use dbconn.py to connect to a generic DB
 # and execute SQL queries
-from dbconn import interface as dbc
+import microetl.dbconn.interface as dbc
+
+# import the abstracted Web API client
+import microetl.apiclient as apic
 
 # Globals
+debug_level = 1
+
 # Error Messages
 err_msg = [
     # 0. Generic error message:
@@ -96,6 +106,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 # Set the log level to CRITICAL:
 # logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s %(levelname)s %(message)s')
 
+# Function that does nothing:
+def do_nothing():
+    """
+    Do nothing
+    :return: None
+    """
+    logging.debug("Not implemented yet!")
+
 # Function to read a JSON Schema
 def read_json_schema(json_schema_file):
     """
@@ -112,7 +130,7 @@ def read_json_schema(json_schema_file):
         logging.error(err_msg[0].format(traceback.format_exc()))
         sys.exit(1)
 
-# Function to read and return a Configuration File
+# Function that reads and return a Configuration File (aka a Job file):
 def read_config_file(config_file):
     """
     Read the Configuration File
@@ -123,12 +141,201 @@ def read_config_file(config_file):
         with open(config_file, 'r') as file:
             config_raw = file.read()
         t = Template(config_raw, undefined=Undefined)
-        config = yaml.safe_load(t.render(os.environ))
+        config = yaml.load(t.render(os.environ), Loader=yaml.FullLoader)
+
+        if debug_level > 1:
+          test = json.dumps(config, indent=2)
+          print("-- Config (in read_config_file): ")
+          print(test)
+          print("--")
+
         return config
     except Exception as e:
         logging.error(err_msg[3] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
         sys.exit(1)
+
+# Function that takes microETL config, a datasource type and the input data path and returns data 
+# as required by the configuration
+def read_data_from_ds(config, datasource_type: str = 'file', input_data_path: str = '', section_name: str = 'source'):
+    """
+    Read data from the datasource
+    :param config: Configuration
+    :param datasource_type: Datasource Type
+    :param input_data_path: Input Data Path
+    :return: processed data
+    """
+    try:
+        if datasource_type.lower().strip() == 'csv':
+            data = pd.DataFrame()
+            for filename in os.listdir(input_data_path):
+                if filename.lower().endswith('.csv'):
+                    full_filename: str = os.path.join(input_data_path, filename)
+                    data += process_data(config, input_data_path, section_name, pd.read_csv(full_filename)) 
+        elif datasource_type.lower().strip() == 'json':
+            data = json.loads('')
+            for filename in os.listdir(input_data_path):
+                if filename.lower().endswith('.json'):
+                    full_filename: str = os.path.join(input_data_path, filename)
+                    data += process_data(config, input_data_path, section_name, pd.read_json(full_filename))
+        elif datasource_type.lower().strip() == 'excel':
+            data = pd.DataFrame()
+            for filename in os.listdir(input_data_path):
+                if filename.lower().endswith('.xlsx'):
+                    full_filename: str = os.path.join(input_data_path, filename)
+                    data += process_data(config, input_data_path, section_name, pd.read_excel(full_filename))
+        elif datasource_type.lower().strip() == 'api':
+            data = process_data(config, input_data_path, section_name, read_data_from_api(config, section_name))
+        elif datasource_type.lower().strip() == 'file':
+            data = ''
+            for filename in os.listdir(input_data_path):
+                if filename != None and filename != '': 
+                    full_filename: str = os.path.join(input_data_path, filename)
+                    tmp_data = process_data(config, input_data_path, section_name, read_data_from_file(full_filename))
+                    if tmp_data != None and tmp_data != '':
+                        data += str(tmp_data)
+        else:
+            ds_type = datasource_type.lower().strip()
+            db_list = ['snowflake', 'mysql', 'postgresql', 'neo4j', 'elasticsearch', 'mongodb']
+            if any(ds_type in s for s in db_list):
+                data = get_data_from_db(config, input_data_path, datasource_type, section_name)
+            else:
+                raise ValueError("Invalid datasource type: " + datasource_type)
+        
+        return data
+    except Exception as e:
+        logging.error(err_msg[13] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function that reads a generic data file:
+def read_data_from_file(filename: str = 'data.txt'):
+    """
+    Read the Configuration File
+    :param filename: Configuration File
+    :return: Raw data
+    """
+    try:
+        if debug_level > 0:
+            print("Reading data from raw data file: " + filename + " ... ")
+        with open(filename, 'r') as file:
+            data = file.read()
+        return data
+    except Exception as e:
+        logging.error(err_msg[3] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function that takes microETL config, and returns data from an API
+def read_data_from_api(config, section_name):
+    """
+    Read data from an API
+    :param config: Configuration
+    :param input_data_path: Input Data Path
+    :return: Data
+    """
+    try:
+        if config.get('datasources').get(section_name).get('api').get('method') == 'restful_get':
+            data = apic.get_data(config.get('datasources').get(section_name).get('api').get('request'), None, None)
+        elif config.get('datasources').get(section_name).get('api').get('method') == 'restful_post':
+            data = apic.post_data(config.get('datasources').get(section_name).get('api').get('request'), None, None)
+        elif config.get('datasources').get(section_name).get('api').get('method') == 'soap':
+            data = apic.get_soap_data(config.get('datasources').get(section_name).get('api').get('request'))
+        else:
+            raise ValueError(err_msg[15] + config.get('datasources').get(section_name).get('api').get('method') + " is not a valid API method")
+        return data
+    except Exception as e:
+        logging.error(err_msg[13] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
+# Function that takes microETL config, a datasource type and returns data from a database
+# and uses dbc to connect to the database and execute queries
+def get_data_from_db(config, inp_path, datasource_type: str = 'postgres', section_name: str = 'source'):
+    """
+    Read data from a database
+    :param config: Configuration
+    :param inp_path: Input Data Path
+    :param datasource_type: Datasource Type
+    :param section_name: Section Name
+    :return: Data
+    """
+    try:
+        # Get the datasource type
+        ds_type = datasource_type.lower().strip()
+        if ds_type == 'sql':
+            raise ValueError(datasource_type + " is not a valid datasource type")
+        
+        # Get the query to run
+        query = config.get('actions').get(section_name).get('template')
+        if query == None or query == '':
+            query = config.get('actions').get(section_name).get('query')
+        else:
+            query = read_sql_query(os.path.join(inp_path, query))
+
+        if query == None or query == '':
+            raise ValueError("Invalid query: '" + str(query) + "' for section: " + section_name + ". template cannot be empty!")
+
+        # Get the query parameters
+        query_params = config.get('actions').get(section_name).get('query_params')
+        if query_params == None or query_params == '':
+            query_params = config.get('actions').get(section_name).get('query_parameters')
+        if query_params == None or query_params == '':
+            query_params = config.get('actions').get(section_name).get('parameters')
+        if query_params == None or query_params == '':
+            query_params = config.get('actions').get(section_name).get('params')
+
+        if debug_level > 1:
+            print("-- Query params (in read_data_from_db): ")
+            print(query_params)
+            print("--")
+
+        # Process query and parameters
+        query, query_params = replace_sql_parameters(config, inp_path, query, section_name, query_params)
+
+        if debug_level > 1:
+            print("-- Query processed (in read_data_from_db): ")
+            print(query)
+            print("--")
+        
+        if query != None and query != '':
+            # Get the database connection
+            conn = dbc.get_db_connection(config, section_name)
+
+            # Get the Cursor
+            cur = dbc.get_db_cursor(conn, ds_type)
+
+            # Get the type of action to perform
+            action_type = config.get('actions').get(section_name).get('type').lower().strip()
+
+            if debug_level > 1:
+                print("-- Action type (in read_data_from_db): ")
+                print(action_type)
+                print("--")
+
+            # Execute the query
+            if action_type == 'sql_to_dataframe':
+                data = dbc.execute_db_query_return_dataframe(conn, cur, query, ds_type, query_params)
+            elif action_type == 'sql_to_results':
+                data = dbc.execute_db_query_return_results(conn, cur, query, ds_type, query_params)
+            elif action_type == 'sql_to_json':
+                data = dbc.execute_db_query_return_json(conn, cur, query, ds_type, query_params)
+            else:
+                data = None
+
+            # Close the cursor
+            dbc.close_db_cursor(cur, ds_type)
+
+            # Close the connection
+            dbc.close_db_connection(conn, ds_type)
+
+            return data
+        else:
+            return None
+    except Exception as e:
+        logging.error(err_msg[13] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
 
 # Function to read an SQL Query file and return the Query
 def read_sql_query(sql_query_file):
@@ -147,31 +354,440 @@ def read_sql_query(sql_query_file):
         sys.exit(1)
 
 # function that takes an SQL query and a dictionary of parameters and returns a SQL query with the parameters replaced
-def replace_sql_parameters(sql_query, parameters):
+def replace_sql_parameters(config, inp_path, sql_query, section_name, parameters):
     """
     Replace the SQL Parameters
+    :param config: Configuration
     :param sql_query: SQL Query
+    :param section_name: Section Name of the config where to find the parameters
     :param parameters: Parameters
     :return: SQL Query with the Parameters replaced
     """
     try:
+        # Retrieve parameters from the configuration file
+        if parameters == None or parameters == []:
+            parameters = config.get('actions').get(section_name).get('parameters')
+
+        #if parameters != None and parameters != []:
+            # Loop through the parameters
+            #for parameter in parameters:
+            #    if parameter.get('name').lower().strip() == 'parameters_file' or parameter.get('name').lower().strip() == 'file':
+            #        if parameter.get('value') != None:
+            #            par_filename = os.path.join(inp_path,  parameter['value']) 
+            #            with open(par_filename, 'r') as par_file:
+            #                par_data = yaml.safe_load(par_file)
+            #                parameters.update(par_data)
+            #        else:
+            #            for idx, obj in enumerate(parameters):
+            #                if obj['name'] == parameter.get('name'):
+            #                    parameters.pop(idx)
+
+        if debug_level > 1:
+            print("-- Parameters processed (in replace_sql_parameters): ")
+            print(parameters)
+            print("--")
+
+        if parameters is None or parameters == []:
+            return sql_query
+
+        # Create a dictionary of parameters
+        pyval_prefix = 'pyval('
+        pyval_suffix = ')'
+        par_dict = {}
+        for idx, obj in enumerate(parameters):
+            res = obj['name']
+            if obj['name'].lower().strip().startswith(pyval_prefix):
+                par = obj['name']
+                res = ''.join(par.split(pyval_prefix)[1].split(pyval_suffix)[0])
+                val = str(eval(obj['value'])).strip().replace("'", "").replace('"', '').replace(' ', '')
+                parameters[idx]['value'] = val
+            par_dict[res]=obj['value']
+            
+        yaml_dict = yaml.safe_load(str(par_dict))
+
+        if debug_level > 1:
+            print("-- Parameters dictionary (in replace_sql_parameters): ")
+            print(yaml_dict)
+            print("--")
+
         # Create a JinjaSql object
-        j = JinjaSql()
-        # Create a new SQL Query with the parameters replaced
-        new_sql_query, bind_params = j.prepare_query(sql_query, parameters)
-        return new_sql_query
+        loader = DictLoader({"params" : yaml_dict})
+
+        if debug_level > 1:
+            print("-- Loader (in replace_sql_parameters): ")
+            print(loader.mapping)
+            print("--")
+
+        j = JinjaSql(param_style='pyformat')
+        query, bind_params = j.prepare_query(j.env.from_string(sql_query), loader.mapping)
+
+        if debug_level > 1:
+            print("-- Query (in replace_sql_parameters): ")
+            print(query)
+            print("--")
+            print("-- Params (in replace_sql_parameters): ")
+            print(bind_params)
+            print("--")
+
+        return query, bind_params
     except Exception as e:
         logging.error(err_msg[5] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
-        sys.exit(1)
+        return None
+
+# Function that takes a configuration and a dictionary of parameters and returns a configuration with the parameters replaced or added
+def process_config_parameters(config, inp_path, section_name, parameters):
+    """
+    Process the Configuration Parameters
+    :param config: Configuration
+    :param section_name: Section Name of the config where to find the parameters
+    :param parameters: Parameters
+    :return: Configuration with the Parameters replaced or added
+    """
+    try:
+        tmp_pars = parameters
+        if config.get('actions').get(section_name).get('parameters') != None:
+            # Loop through the parameters
+            for parameter in parameters:
+                if parameter.get('name').lower().strip() == 'parameters_file' or parameter.get('name').lower().strip() == 'file':
+                    if parameter.get('value') != None:
+                        par_filename = os.path.join(inp_path,  parameter['value']) 
+                        with open(par_filename, 'r') as par_file:
+                            par_data = yaml.safe_load(par_file)
+                            parameters.update(par_data)
+        
+            # Create a Jinja2 Environment
+            env = Environment(undefined=Undefined)
+            # Create a Jinja2 Template
+            template = env.from_string(str(parameters))
+            # Render the Template
+            tmp_pars = yaml.safe_load(template.render(os.environ))
+
+        if debug_level > 1:
+            print("-- Processed parameters (in process_config_parameters): ")
+            print(tmp_pars)
+            print("--")
+
+        return tmp_pars
+    except Exception as e:
+        logging.error(err_msg[4] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return parameters
+
+# Function that takes a configuration and a data unit and processes it according to the configuration
+def process_data(config, inp_path, sect_name, data):
+    """
+    Process the Data
+    :param config: Configuration
+    :param inp_path: Input Path
+    :param sect_name: Section Name of the config where to find the parameters
+    :param data: Data
+    :return: Processed Data
+    """
+    try:
+        # Get the Actions
+        actions = config.get('actions').get(sect_name)
+        # Get the Action Type
+        action_type = actions.get('action_type')
+        if action_type == None:
+            action_type = 'no_action'
+        # Get the Action Parameters
+        parameters = actions.get('parameters')
+        # Get the Action Parameters
+        parameters = process_config_parameters(config, inp_path, sect_name, parameters)
+        # Process the Action
+        if action_type == 'filter':
+            data = filter_data(data, parameters)
+        elif action_type == 'aggregate':
+            data = aggregate_data(data, parameters)
+        elif action_type == 'sort':
+            data = sort_data(data, parameters)
+        elif action_type == 'pivot':
+            data = pivot_data(data, parameters)
+        elif action_type == 'join':
+            data = join_data(data, parameters)
+        elif action_type == 'write':
+            write_data_to_ds(config, data, parameters)
+        elif action_type == 'read':
+            data = read_data_from_ds(config, parameters.get('datasource_type'), parameters.get('input_data_path'), sect_name)
+        elif action_type == 'sql':
+            query, query_params = replace_sql_parameters(config, inp_path, read_sql_query(parameters.get('sql_query_file')), sect_name, parameters)
+            data = read_data_from_db(config, query, query_params)
+        elif action_type == 'api':
+            data = read_data_from_api(config, parameters.get('input_data_path'))
+        elif action_type == 'no_action':
+            return data
+        else:
+            logging.error(err_msg[14] + "Invalid action type: " + str(action_type))
+            return None
+        
+        return data
+    except Exception as e:
+        logging.error(err_msg[12] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function to filter the Data according to the parameters
+def filter_data(data, parameters):
+    """
+    Filter the Data
+    :param data: Data
+    :param parameters: Parameters
+    :return: Filtered Data
+    """
+    try:
+        # Get the Filter Parameters
+        filter_parameters = parameters.get('filter_parameters')
+        # Loop through the Filter Parameters
+        for filter_parameter in filter_parameters:
+            # Get the Filter Parameter
+            filter_parameter = filter_parameters.get(filter_parameter)
+            # Get the Filter Parameter Name
+            filter_parameter_name = filter_parameter.get('filter_parameter_name')
+            # Get the Filter Parameter Value
+            filter_parameter_value = filter_parameter.get('filter_parameter_value')
+            # Get the Filter Parameter Operator
+            filter_parameter_operator = filter_parameter.get('filter_parameter_operator')
+            # Filter the Data
+            if filter_parameter_operator == 'eq':
+                data = data[data[filter_parameter_name] == filter_parameter_value]
+            elif filter_parameter_operator == 'ne':
+                data = data[data[filter_parameter_name] != filter_parameter_value]
+            elif filter_parameter_operator == 'gt':
+                data = data[data[filter_parameter_name] > filter_parameter_value]
+            elif filter_parameter_operator == 'ge':
+                data = data[data[filter_parameter_name] >= filter_parameter_value]
+            elif filter_parameter_operator == 'lt':
+                data = data[data[filter_parameter_name] < filter_parameter_value]
+            elif filter_parameter_operator == 'le':
+                data = data[data[filter_parameter_name] <= filter_parameter_value]
+            elif filter_parameter_operator == 'in':
+                data = data[data[filter_parameter_name].isin(filter_parameter_value)]
+            elif filter_parameter_operator == 'not in':
+                data = data[~data[filter_parameter_name].isin(filter_parameter_value)]
+            elif filter_parameter_operator == 'contains':
+                data = data[data[filter_parameter_name].str.contains(filter_parameter_value)]
+            elif filter_parameter_operator == 'not contains':
+                data = data[~data[filter_parameter_name].str.contains(filter_parameter_value)]
+            elif filter_parameter_operator == 'startswith':
+                data = data[data[filter_parameter_name].str.startswith(filter_parameter_value)]
+            elif filter_parameter_operator == 'endswith':
+                data = data[data[filter_parameter_name].str.endswith(filter_parameter_value)]
+            else:
+                logging.error(err_msg[15] + "Invalid filter operator: " + filter_parameter_operator)
+                sys.exit(1)
+        return data
+    except Exception as e:
+        logging.error(err_msg[11] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+    
+# Function to aggregate the Data according to the parameters
+def aggregate_data(data, parameters):
+    """
+    Aggregate the Data
+    :param data: Data
+    :param parameters: Parameters
+    :return: Aggregated Data
+    """
+    try:
+        # Get the Aggregate Parameters
+        aggregate_parameters = parameters.get('aggregate_parameters')
+        # Get the Aggregate Parameter
+        aggregate_parameter = aggregate_parameters.get('aggregate_parameter')
+        # Get the Aggregate Parameter Name
+        aggregate_parameter_name = aggregate_parameter.get('aggregate_parameter_name')
+        # Get the Aggregate Parameter Function
+        aggregate_parameter_function = aggregate_parameter.get('aggregate_parameter_function')
+        # Get the Aggregate Parameter Group By
+        aggregate_parameter_group_by = aggregate_parameter.get('aggregate_parameter_group_by')
+        # Aggregate the Data
+        if aggregate_parameter_function == 'count':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].count().reset_index()
+        elif aggregate_parameter_function == 'sum':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].sum().reset_index()
+        elif aggregate_parameter_function == 'mean':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].mean().reset_index()
+        elif aggregate_parameter_function == 'median':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].median().reset_index()
+        elif aggregate_parameter_function == 'min':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].min().reset_index()
+        elif aggregate_parameter_function == 'max':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].max().reset_index()
+        elif aggregate_parameter_function == 'std':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].std().reset_index()
+        elif aggregate_parameter_function == 'var':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].var().reset_index()
+        elif aggregate_parameter_function == 'first':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].first().reset_index()
+        elif aggregate_parameter_function == 'last':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].last().reset_index()
+        elif aggregate_parameter_function == 'nunique':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].nunique().reset_index()
+        elif aggregate_parameter_function == 'unique':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].unique().reset_index()
+        elif aggregate_parameter_function == 'list':
+            data = data.groupby(aggregate_parameter_group_by)[aggregate_parameter_name].apply(list).reset_index()
+        else:
+            logging.error(err_msg[16] + "Invalid aggregate function: " + aggregate_parameter_function)
+            return None
+        return data
+    except Exception as e:
+        logging.error(err_msg[12] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function to sort the Data according to the parameters
+def sort_data(data, parameters):
+    """
+    Sort the Data
+    :param data: Data
+    :param parameters: Parameters
+    :return: Sorted Data
+    """
+    try:
+        # Get the Sort Parameters
+        sort_parameters = parameters.get('sort_parameters')
+        # Get the Sort Parameter
+        sort_parameter = sort_parameters.get('sort_parameter')
+        # Get the Sort Parameter Name
+        sort_parameter_name = sort_parameter.get('sort_parameter_name')
+        # Get the Sort Parameter Order
+        sort_parameter_order = sort_parameter.get('sort_parameter_order')
+        # Sort the Data
+        if sort_parameter_order == 'asc':
+            data = data.sort_values(by=[sort_parameter_name], ascending=True)
+        elif sort_parameter_order == 'desc':
+            data = data.sort_values(by=[sort_parameter_name], ascending=False)
+        else:
+            logging.error(err_msg[17] + "Invalid sort order: " + sort_parameter_order)
+            return None
+        return data
+    except Exception as e:
+        logging.error(err_msg[13] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function to limit the Data according to the parameters
+def limit_data(data, parameters):
+    """
+    Limit the Data
+    :param data: Data
+    :param parameters: Parameters
+    :return: Limited Data
+    """
+    try:
+        # Get the Limit Parameters
+        limit_parameters = parameters.get('limit_parameters')
+        # Get the Limit Parameter
+        limit_parameter = limit_parameters.get('limit_parameter')
+        # Get the Limit Parameter Value
+        limit_parameter_value = limit_parameter.get('limit_parameter_value')
+        # Limit the Data
+        data = data.head(limit_parameter_value)
+        return data
+    except Exception as e:
+        logging.error(err_msg[14] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+    
+# Function that pivot data according to the parameters
+def pivot_data(data, parameters):
+    """
+    Pivot the Data
+    :param data: Data
+    :param parameters: Parameters
+    :return: Pivoted Data
+    """
+    try:
+        # Get the Pivot Parameters
+        pivot_parameters = parameters.get('pivot_parameters')
+        # Get the Pivot Parameter
+        pivot_parameter = pivot_parameters.get('pivot_parameter')
+        # Get the Pivot Parameter Name
+        pivot_parameter_name = pivot_parameter.get('pivot_parameter_name')
+        # Get the Pivot Parameter Values
+        pivot_parameter_values = pivot_parameter.get('pivot_parameter_values')
+        # Get the Pivot Parameter Index
+        pivot_parameter_index = pivot_parameter.get('pivot_parameter_index')
+        # Pivot the Data
+        data = data.pivot(index=pivot_parameter_index, columns=pivot_parameter_name, values=pivot_parameter_values)
+        return data
+    except Exception as e:
+        logging.error(err_msg[15] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function that joins data according to the parameters
+def join_data(data, parameters):
+    """
+    Join the Data
+    :param data: Data
+    :param parameters: Parameters
+    :return: Joined Data
+    """
+    try:
+        # Get the Join Parameters
+        join_parameters = parameters.get('join_parameters')
+        # Get the Join Parameter
+        join_parameter = join_parameters.get('join_parameter')
+        # Get the Join Parameter Name
+        join_parameter_name = join_parameter.get('join_parameter_name')
+        # Get the Join Parameter Values
+        join_parameter_values = join_parameter.get('join_parameter_values')
+        # Get the Join Parameter Index
+        join_parameter_index = join_parameter.get('join_parameter_index')
+        # Join the Data
+        data = data.join(join_parameter_values, on=join_parameter_index, how=join_parameter_name)
+        return data
+    except Exception as e:
+        logging.error(err_msg[15] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# Function that writes data to a datasource according to the provided MicroETL configuration
+def write_data_to_ds(config, data, parameters):
+    """
+    Write the Data
+    :param config: Configuration
+    :param data: Data
+    :param parameters: Parameters
+    :return: None
+    """
+    try:
+        # Get the Write Parameters
+        write_parameters = config.get('datasources').get('destination') 
+        # Get the Write Parameter
+        write_parameter = write_parameters.get('write_parameter')
+        # Get the Write Parameter Name
+        write_parameter_name = write_parameter.get('write_parameter_name')
+        # Get the Write Parameter Value
+        write_parameter_value = write_parameter.get('write_parameter_value')
+        # Get the Write Parameter Type
+        write_parameter_type = write_parameter.get('write_parameter_type')
+        # Write the Data
+        if write_parameter_type == 'file':
+            #write_data_to_file(config, data, write_parameter_value)
+            do_nothing()
+        elif write_parameter_type == 'db':
+            #write_data_to_db(config, data, write_parameter_value)
+            do_nothing()
+        else:
+            logging.error(err_msg[18] + "Invalid write type: " + write_parameter_type)
+            return None
+    except Exception as e:
+        logging.error(err_msg[19] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
 
 # Function to read the Data from a Database
 # and return a DataFrame
-def read_data_from_db(config, sql_query):
+def read_data_from_db(config, sql_query, sql_params=None):
     """
     Read the Data from the Database
     :param config: Configuration
     :param sql_query: SQL Query
+    :param sql_params: SQL Parameters
     :return: Data
     """
     try:
@@ -180,7 +796,7 @@ def read_data_from_db(config, sql_query):
         # Get the DB Cursor
         db_cursor = dbc.get_db_cursor(db_connection, config['db_type'])
         # Execute the SQL Query and get the Data
-        data = dbc.execute_db_query_return_dataframe(db_connection, db_cursor, sql_query, config['db_type'])
+        data = dbc.execute_db_query_return_dataframe(db_connection, db_cursor, sql_query, config['db_type'], sql_params)
         # Close the DB Connection
         #if config['db_type'] != 'none':
         #    db_connection.close()
@@ -382,31 +998,39 @@ def write_data_to_json(data, json_file):
         sys.exit(1)
 
 # Function that takes an SQL query and return a JSON document following the JSON schema
-def etleng_sql_to_json(config_file, old_json_schema_file, json_schema_file, sql_query_file, json_file):
+def etleng_sql_to_json(config, section_name, json_schema_file, sql_query):
     """
     ETL Engine
-    :param config_file: Configuration File
-    :param old_json_schema_file: Old JSON Schema File
-    :param json_schema_file: New JSON Schema File
-    :param sql_query_file: SQL Query File
-    :param json_file: JSON File
-    :return: None
+    :param config: Configuration File
+    :param section_name: Section Name
+    :param json_schema_file: JSON Schema File
+    :param sql_query: SQL Query
+    :return: JSON Document
     """
     try:
-        # Read the Configuration File
-        config = read_config_file(config_file)
-        # Read the Old JSON Schema
-        old_json_schema = read_json_schema(old_json_schema_file)
-        # Read the New JSON Schema
-        json_schema = read_json_schema(json_schema_file)
-        # Read the SQL Query
-        sql_query = read_sql_query(sql_query_file)
-        # Run the ETL Pipeline
-        etleng_run_pipeline(config, old_json_schema, json_schema, sql_query, json_file)
+        # Get DS type
+        ds_type = config.get('datasources').get(section_name).get('type')
+        if ds_type == None or ds_type == '':
+            ds_type = config.get('datasources').get(section_name).get('db_type')
+        if ds_type == None or ds_type == '':
+            raise ValueError("Datasource type is not defined in the job file")
+        
+        # Connect to a Database
+        conn = dbc.get_db_connection(config, section_name)
+        # Get Cursor
+        cur = dbc.get_db_cursor(conn, ds_type)
+        # Run the SQL Query
+        df = dbc.execute_db_query_return_dataframe(conn, cur, sql_query, ds_type)
+        # Close the Cursor
+        # dbc.
+        # Close the Connection
+        dbc.close_db_connection(conn, ds_type)
+        # Transform the Dataframe into a JSON document
+        return etleng_df_to_json(df, json_schema_file)
     except Exception as e:
         logging.error(err_msg[13] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
-        sys.exit(1)
+        return None
 
 # Function that transform a dataframe into a JSON document following the JSON schema
 def etleng_df_to_json(df, json_schema_file):
@@ -429,31 +1053,90 @@ def etleng_df_to_json(df, json_schema_file):
         sys.exit(1)
 
 # Function that runs the ETL pipeline
-def etleng_run_pipeline(config, old_json_schema, json_schema, sql_query, json_file):
+def etleng_run_pipeline(config, inp_path, out_path):
     """
     Run the ETL Pipeline
     :param config: Configuration
-    :param old_json_schema: Old JSON Schema
-    :param json_schema: New JSON Schema
-    :param sql_query: SQL Query
-    :param json_file: JSON File
+    :param inp_path: Input Data path (if any)
+    :param out_path: Output Data path (if any)
     :return: None
     """
+    
     try:
-        # Read the Data from the Database
-        data = read_data_from_db(config, sql_query)
+        # Process configuration file
+        src_ds: str = ''
+        src_ds = str(config.get('datasources').get('source').get('type' , ''))
+        if src_ds == '':
+            src_ds = str(config.get('datasources').get('source').get('db_type' , ''))
+        if src_ds == '' and inp_path != '':
+            src_ds = 'file'
+        if src_ds == '' and inp_path == '':
+            raise ValueError('No source data type specified in the configuration file')
+        
+        dst_ds: str = ''
+        dst_ds = str(config.get('datasources').get('destination').get('type' , ''))
+        if dst_ds == '':
+            dst_ds = str(config.get('datasources').get('destination').get('db_type' , ''))
+        if dst_ds == '' and out_path != '':
+            dst_ds = 'file'
+        if dst_ds == '' and out_path == '':
+            raise ValueError('No destination data type specified in the configuration file')
 
-        # Transform the Data from the old JSON schema to the new JSON schema
-        if config['old_json_schema'] != '':
-            data = transform_data_old_to_new(data, old_json_schema, json_schema)
-            # Validate the Data
-            data = validate_data(data.to_dict('records'), json_schema)
-        else:
-            data = etleng_df_to_json(data, json_schema)
+        # Read the Data from the Source
+        data = read_data_from_ds(config, str(src_ds), str(inp_path), "source")
+        if debug_level > 0:
+            print("-- Data from source (in etleng_run_pipeline):")
+            print(data)
+            print("--")
 
-        # Write the Data to a JSON file
-        write_data_to_json(data, json_file)
+        # Transform the Data to the new format:
+
+        # if config['old_json_schema'] != '':
+        #     data = transform_data_old_to_new(data, old_json_schema, json_schema)
+        #     # Validate the Data
+        #     data = validate_data(data.to_dict('records'), json_schema)
+        # else:
+        #     data = etleng_df_to_json(data, json_schema)
+
+        # # Write the Data to a JSON file
+        # write_data_to_json(data, json_file)
+        return True
     except Exception as e:
         logging.error(err_msg[14] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
-        sys.exit(1)
+        return False
+
+# Function that loads a pipeline configuration file and run the ETL pipeline
+def etleng_run_pipeline_from_config(config_file, base_path: str, cfg_path: str, inp_path: str, out_path: str):
+    """
+    Run the ETL Pipeline from a Configuration File
+    :param config_file: Configuration File
+    :param cfg_path: Configuration Path
+    :param inp_path: Input Data path (if any)
+    :param out_path: Output Data path (if any)
+    :return: None
+    """
+    try:
+        if debug_level > 0:
+            print('Loading config file: ' + config_file)
+
+        # Add the !include constructor to the yaml loader
+        # which will use for base_path the parent path to the directory that contains 
+        # the jobs configuration file
+        YamlIncludeConstructor.add_to_loader_class(loader_class=yaml.FullLoader, base_dir=base_path)
+
+        # Read the Configuration File
+        config = read_config_file(os.path.join(cfg_path, config_file))
+        # Check if the input path is provided in the configuration file
+        if config.get('datasources').get('source').get('local_input_data') != None:
+            inp_path = str(config.get('datasources').get('source').get('local_input_data'))
+        # Check if the output path is provided in the configuration file
+        if config.get('datasources').get('destination').get('local_output_data') != None:
+            out_path = str(config.get('datasources').get('destination').get('local_output_data'))
+        # Run the ETL Pipeline
+        return etleng_run_pipeline(config, inp_path, out_path)
+
+    except Exception as e:
+        logging.error(err_msg[15] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return False

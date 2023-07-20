@@ -22,10 +22,10 @@ from snowflake.connector import InterfaceError
 from snowflake.connector import Error
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Global Variables
 # Snowflake Connection Variables
@@ -145,8 +145,23 @@ def get_cursor(conn):
                         (traceback.format_exc()))
         sys.exit(1)
 
+# Function that closes the cursor object to the snowflake database
+def close_cursor(cur):
+    """
+    Close Snowflake Cursor
+    :param cur: Snowflake Cursor Object
+    """
+    try:
+        # Close the Snowflake cursor object
+        cur.close()
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format
+                        (traceback.format_exc()))
+        sys.exit(1)
+
 # function that executes a query on the snowflake database
-def exec_query(conn, cur, query):
+def exec_query(conn, cur, query, query_params=None):
     """
     Execute Snowflake Query
     :param conn: Snowflake Connection Object
@@ -155,7 +170,7 @@ def exec_query(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
     except OperationalError as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -189,7 +204,7 @@ def exec_query(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the snowflake database and returns the results
-def exec_query_return_results(conn, cur, query):
+def exec_query_return_results(conn, cur, query, query_params=None):
     """
     Execute Snowflake Query and Return Results
     :param conn: Snowflake Connection Object
@@ -199,7 +214,7 @@ def exec_query_return_results(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
@@ -236,7 +251,7 @@ def exec_query_return_results(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the snowflake database and returns the results as a dataframe
-def exec_query_return_dataframe(conn, cur, query):
+def exec_query_return_dataframe(conn, cur, query, query_params=None):
     """
     Execute Snowflake Query and Return Dataframe
     :param conn: Snowflake Connection Object
@@ -246,13 +261,12 @@ def exec_query_return_dataframe(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
-        results = cur.fetchall()
-        # Convert the results to a dataframe
-        df = pd.DataFrame(results)
-        return df
+        results = pd.DataFrame(cur.fetchall())
+        results.columns=[ x.name for x in cur.description ]
+        return results
     except OperationalError as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format
@@ -285,7 +299,7 @@ def exec_query_return_dataframe(conn, cur, query):
         sys.exit(1)
 
 # Function that executes a Snowflake query and returns the results as a JSON object
-def exec_query_return_json(conn, cur, query):
+def exec_query_return_json(conn, cur, query, query_params=None):
     """
     Execute Snowflake Query and Return JSON
     :param conn: Snowflake Connection Object
@@ -295,12 +309,13 @@ def exec_query_return_json(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
-        results = cur.fetchall()
+        results = pd.DataFrame(cur.fetchall())
+        results.columns=[ x.name for x in cur.description ]
         # Convert the results to a JSON object
-        json_results = json.dumps(results, default=str)
+        json_results = results.to_json(orient = 'records')
         return json_results
     except OperationalError as e:
         logging.error(erx.msg[0].format(str(e)))

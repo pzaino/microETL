@@ -17,10 +17,10 @@ import elasticsearch
 import elasticsearch.helpers
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Function that returns a connection object for ElasticSearch database
 # and accept db connection parameters as a collection of keyword arguments
@@ -86,8 +86,22 @@ def get_cursor(conn):
                         (traceback.format_exc()))
         sys.exit(1)
 
+# Function to close a Elasticsearch cursor
+def close_cursor(cur):
+    """
+    Close Elasticsearch Cursor
+    :param cur: Elasticsearch Cursor Object
+    :return: None
+    """
+    try:
+        cur.close()
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
 # function that executes a query on the Elasticsearch database
-def exec_query(conn, cur, query):
+def exec_query(conn, cur, query, query_params=None):
     """
     Execute Elasticsearch Query
     :param conn: Elasticsearch Connection Object
@@ -97,7 +111,7 @@ def exec_query(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -107,7 +121,7 @@ def exec_query(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the Elasticsearch database and returns the results
-def exec_query_return_results(conn, cur, query):
+def exec_query_return_results(conn, cur, query, query_params=None):
     """
     Execute Elasticsearch Query and Return Results
     :param conn: Elasticsearch Connection Object
@@ -117,7 +131,7 @@ def exec_query_return_results(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
@@ -130,7 +144,7 @@ def exec_query_return_results(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the elasticsearch database and returns the results as a dataframe
-def exec_query_return_dataframe(conn, cur, query):
+def exec_query_return_dataframe(conn, cur, query, query_params=None):
     """
     Execute Elasticsearch Query and Return Dataframe
     :param conn: Elasticsearch Connection Object
@@ -140,12 +154,11 @@ def exec_query_return_dataframe(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
-        # Fetch the results
-        results = cur.fetchall()
-        # Convert the results to a dataframe
-        df = pd.DataFrame(results)
+        # Fetch the results as Dataframes
+        df = pd.DataFrame(cur.fetchall())
+        df.columns=[ x.name for x in cur.description ]
         return df
     except elasticsearch.exceptions.ConnectionError as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -174,7 +187,7 @@ def exec_query_return_dataframe(conn, cur, query):
         sys.exit(1)
 
 # Function that executes an Elasticsearch query and returns the results as a JSON object
-def exec_query_return_json(conn, cur, query):
+def exec_query_return_json(conn, cur, query, query_params=None):
     """
     Execute Elasticsearch Query and Return JSON
     :param conn: Elasticsearch Connection Object
@@ -184,13 +197,15 @@ def exec_query_return_json(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
         # Convert the results to a JSON object
-        json_results = json.dumps(results)
-        return json_results
+        json_data = []
+        for result in results:
+            json_data.append(dict(result))
+        return json_data
     except elasticsearch.exceptions.ConnectionError as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format

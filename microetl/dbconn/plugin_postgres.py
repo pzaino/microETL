@@ -34,10 +34,10 @@ from psycopg2.extensions import TRANSACTION_STATUS_INERROR
 from psycopg2.extensions import TRANSACTION_STATUS_UNKNOWN
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # function that returns a connection object to the postgres database
 # and accept db connection parameters as a collection of keyword arguments
@@ -58,12 +58,24 @@ def get_connection(kwargs, target: str = 'source'):
         if pwd == '':
             pwd = os.environ.get('POSTGRES_PASSWORD', 'postgres')
 
+        host: str = kwargs.get("datasources").get(target).get('host', 'localhost')
+        if host == None:
+            host = 'localhost'
+
+        port: str = kwargs.get("datasources").get(target).get('port', '5432')
+        if port == None:
+            port = '5432'
+        
+        database: str = kwargs.get("datasources").get(target).get('database', '')
+        if database == None:
+            database = 'postgres'
+        
         conn = psycopg2.connect(
-            host=str(kwargs.get("datasources").get(target).get('host', 'localhost')),
-            port=str(kwargs.get("datasources").get(target).get('port', 5432)),
+            host=host,
+            port=port,
             user=usr,
             password=pwd,
-            database=str(kwargs.get("datasources").get(target).get('database', ''))
+            database=database
         )
         return conn
     except Exception as e:
@@ -81,6 +93,21 @@ def close_connection(conn):
     try:
         # Close the Postgres connection
         conn.close()
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
+# Function that closes a postgres cursor
+def close_cursor(cur):
+    """
+    Close Postgres Cursor
+    :param cur: Postgres Cursor Object
+    :return: None
+    """
+    try:
+        # Close the Postgres cursor
+        cur.close()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format(traceback.format_exc()))
@@ -104,7 +131,7 @@ def get_cursor(conn):
         sys.exit(1)
 
 # function that executes a query on the postgres database
-def exec_query(conn, cur, query):
+def exec_query(conn, cur, query, query_params=None):
     """
     Execute Postgres Query
     :param conn: Postgres Connection Object
@@ -114,7 +141,7 @@ def exec_query(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
     except psycopg2.OperationalError as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -154,7 +181,7 @@ def exec_query(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the postgres database and returns the results
-def exec_query_return_results(conn, cur, query):
+def exec_query_return_results(conn, cur, query, query_params=None):
     """
     Execute Postgres Query and Return Results
     :param conn: Postgres Connection Object
@@ -164,7 +191,7 @@ def exec_query_return_results(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
@@ -201,7 +228,7 @@ def exec_query_return_results(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the postgres database and returns the results as a dataframe
-def exec_query_return_dataframe(conn, cur, query):
+def exec_query_return_dataframe(conn, cur, query, query_params=None):
     """
     Execute Postgres Query and Return Dataframe
     :param conn: Postgres Connection Object
@@ -211,12 +238,11 @@ def exec_query_return_dataframe(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
-        # Fetch the results
-        results = cur.fetchall()
-        # Convert the results to a dataframe
-        df = pd.DataFrame(results)
+        # Fetch the results as Dataframes
+        df = pd.DataFrame(cur.fetchall())
+        df.columns=[ x.name for x in cur.description ]
         return df
     except psycopg2.OperationalError as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -250,22 +276,24 @@ def exec_query_return_dataframe(conn, cur, query):
         sys.exit(1)
 
 # Function that executes a Postgres query and returns the results as a JSON object
-def exec_query_return_json(conn, cur, query):
+def exec_query_return_json(conn, cur, query, query_params=None):
     """
     Execute Postgres Query and Return JSON Object
     :param conn: Postgres Connection Object
     :param cur: Postgres Cursor Object
     :param query: Query to execute
+    :param query_params: Query Parameters
     :return: JSON Object
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
-        results = cur.fetchall()
+        results = pd.DataFrame(cur.fetchall())
+        results.columns=[ x.name for x in cur.description ]
         # Convert the results to a JSON object
-        json_data = json.dumps(results)
+        json_data = results.to_json(orient = 'records')
         return json_data
     except psycopg2.OperationalError as e:
         logging.error(erx.msg[0].format(str(e)))

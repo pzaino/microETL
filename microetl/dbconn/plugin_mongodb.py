@@ -21,10 +21,10 @@ pm = pymongo.MongoClient()
 import pymongo.errors
 
 # Import error messages
-from dbconn import error_msg as erx 
+from . import error_msg as erx 
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Function that returns a connection object for MongoDB database
 # and accept db connection parameters as a collection of keyword arguments
@@ -85,8 +85,22 @@ def get_cursor(conn):
         logging.error(erx.msg[0].format(traceback.format_exc()))
         sys.exit(1)
 
+# Function to close a MongoDB cursor
+def close_cursor(cur):
+    """
+    Close MongoDB Cursor
+    :param cur: MongoDB Cursor Object
+    :return: None
+    """
+    try:
+        cur.close()
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
 # function that executes a query on the MongoDB database
-def exec_query(conn, cur, query):
+def exec_query(conn, cur, query, query_params=None):
     """
     Execute MongoDB Query
     :param conn: MongoDB Connection Object
@@ -96,7 +110,7 @@ def exec_query(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         # Commit the changes
         conn.commit()
     except Exception as e:
@@ -105,7 +119,7 @@ def exec_query(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the mongodb database and returns the results
-def exec_query_return_results(conn, cur, query):
+def exec_query_return_results(conn, cur, query, query_params=None):
     """
     Execute MongoDB Query and Return Results
     :param conn: MongoDB Connection Object
@@ -115,7 +129,7 @@ def exec_query_return_results(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
@@ -128,7 +142,7 @@ def exec_query_return_results(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the mongodb database and returns the results as a dataframe
-def exec_query_return_dataframe(conn, cur, query):
+def exec_query_return_dataframe(conn, cur, query, query_params=None):
     """
     Execute MongoDB Query and Return Dataframe
     :param conn: MongoDB Connection Object
@@ -138,12 +152,11 @@ def exec_query_return_dataframe(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
-        # Fetch the results
-        results = cur.fetchall()
-        # Convert the results to a dataframe
-        df = pd.DataFrame(results)
+        # Fetch the results as Dataframes
+        df = pd.DataFrame(cur.fetchall())
+        df.columns=[ x.name for x in cur.description ]
         return df
     except pymongo.errors.ConnectionFailure as e:
         logging.error(erx.msg[0].format(str(e)))
@@ -157,7 +170,7 @@ def exec_query_return_dataframe(conn, cur, query):
         sys.exit(1)
 
 # function that executes a query on the mongodb database and returns a JSON object
-def exec_query_return_json(conn, cur, query):
+def exec_query_return_json(conn, cur, query, query_params=None):
     """
     Execute MongoDB Query and Return JSON
     :param conn: MongoDB Connection Object
@@ -167,13 +180,15 @@ def exec_query_return_json(conn, cur, query):
     """
     try:
         # Execute the query
-        cur.execute(query)
+        cur.execute(query, query_params)
         conn.commit()
         # Fetch the results
         results = cur.fetchall()
         # Convert the results to a JSON object
-        json_results = json.dumps(results)
-        return json_results
+        json_data = []
+        for result in results:
+            json_data.append(dict(result))
+        return json_data
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format

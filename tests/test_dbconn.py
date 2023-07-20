@@ -37,8 +37,7 @@ import time
 import traceback
 
 # Import DBConn to test it:
-import dbconn
-from dbconn import interface as dbc
+from microetl.core import dbc 
 
 # Some utility functions:
 
