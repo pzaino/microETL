@@ -22,10 +22,10 @@ from snowflake.connector import InterfaceError
 from snowflake.connector import Error
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Global Variables
 # Snowflake Connection Variables
@@ -139,6 +139,21 @@ def get_cursor(conn):
         # Create a Snowflake cursor object
         cur = conn.cursor(DictCursor)
         return cur
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format
+                        (traceback.format_exc()))
+        sys.exit(1)
+
+# Function that closes the cursor object to the snowflake database
+def close_cursor(cur):
+    """
+    Close Snowflake Cursor
+    :param cur: Snowflake Cursor Object
+    """
+    try:
+        # Close the Snowflake cursor object
+        cur.close()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format

@@ -28,6 +28,10 @@ def main(argv):
     elif opt in ("-j", "--jobs"):
       cfg_path = arg
 
+  # Load YAML test configuration:
+  for filename in os.listdir(cfg_path):
+    if filename.lower().endswith('.yaml') or filename.lower().endswith('.yml'):
+      metl.etleng_run_pipeline_from_config(filename, str(cfg_path), str(inp_path), str(out_path))
 
 if __name__ == "__main__":
     main(sys.argv[1:])

@@ -16,10 +16,10 @@ import neo4j
 import neo4j.exceptions
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Function that returns a connection object for Neo4J database
 # and accept db connection parameters as a collection of keyword arguments
@@ -85,6 +85,20 @@ def get_cursor(conn):
         # Create a Neo4J cursor object
         cur = conn.cursor(cursor_factory=neo4j.cursor.DictCursor)
         return cur
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
+# function that closes a cursor object to the Neo4J database
+def close_cursor(cur):
+    """
+    Close Neo4J Cursor
+    :param cur: Neo4J Cursor Object
+    :return: None
+    """
+    try:
+        cur.close()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format(traceback.format_exc()))

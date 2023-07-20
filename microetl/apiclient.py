@@ -109,7 +109,29 @@ def post_data(request, url, headers):
     # Return the data object:
     return data
 
+# Function that makes a soap request to an API and returns the data
+# it takes a config object as input and returns a data object
+def get_soap_data(config):
+    """
+    Make a soap request to an API and return the data
+    :param config: the config object
+    :return: the data object
+    """
 
+    # Set the default return value:
+    data = None
+
+    # Prepare the API request header:
+    header = setup_api_header(config)
+
+    # Prepare the API request parameter:
+    parameter = setup_api_parameter(config)
+
+    # Connect to the API and get the data:
+    data = get_data(config.get('api').get('url'), header, parameter)
+
+    # Return the data object:
+    return data
 
 
 

@@ -16,10 +16,10 @@ import MySQLdb as mysql
 from MySQLdb.connections import Error
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Function that returns a connection object for MySQL database
 # and accept db connection parameters as a collection of keyword arguments
@@ -77,6 +77,21 @@ def get_cursor(conn):
         # Create a MySQL cursor object
         cur = conn.cursor(cursor_factory=mysql.Connect.cursor.MySQLCursorDict)
         return cur
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format
+                        (traceback.format_exc()))
+        sys.exit(1)
+
+# Function to close a MySQL cursor
+def close_cursor(cur):
+    """
+    Close MySQL Cursor
+    :param cur: MySQL Cursor Object
+    :return: None
+    """
+    try:
+        cur.close()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format

@@ -13,7 +13,7 @@ import traceback
 import configparser
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Function to strip username and password from dangerous characters
 def strip_dangerous_characters(string, str_type: str = 'username'):

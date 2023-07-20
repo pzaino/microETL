@@ -21,10 +21,10 @@ pm = pymongo.MongoClient()
 import pymongo.errors
 
 # Import error messages
-from dbconn import error_msg as erx 
+from . import error_msg as erx 
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Function that returns a connection object for MongoDB database
 # and accept db connection parameters as a collection of keyword arguments
@@ -80,6 +80,20 @@ def get_cursor(conn):
         # Create a MongoDB cursor object
         cur = conn.cursor()
         return cur
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
+# Function to close a MongoDB cursor
+def close_cursor(cur):
+    """
+    Close MongoDB Cursor
+    :param cur: MongoDB Cursor Object
+    :return: None
+    """
+    try:
+        cur.close()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format(traceback.format_exc()))

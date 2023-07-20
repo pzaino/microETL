@@ -34,10 +34,10 @@ from psycopg2.extensions import TRANSACTION_STATUS_INERROR
 from psycopg2.extensions import TRANSACTION_STATUS_UNKNOWN
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # function that returns a connection object to the postgres database
 # and accept db connection parameters as a collection of keyword arguments
@@ -81,6 +81,21 @@ def close_connection(conn):
     try:
         # Close the Postgres connection
         conn.close()
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
+        sys.exit(1)
+
+# Function that closes a postgres cursor
+def close_cursor(cur):
+    """
+    Close Postgres Cursor
+    :param cur: Postgres Cursor Object
+    :return: None
+    """
+    try:
+        # Close the Postgres cursor
+        cur.close()
     except Exception as e:
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format(traceback.format_exc()))

@@ -23,25 +23,25 @@ import numpy as np
 import yaml
 
 # Import Snowflake Connector
-from dbconn import plugin_snowflake as sf
+from . import plugin_snowflake as sf
 
 # Import Elasticsearch Connector
-from dbconn import plugin_elasticsearch as es
+from . import plugin_elasticsearch as es
 
 # Import Neo4J Connector
-from dbconn import plugin_neo4j as neo4j
+from . import plugin_neo4j as neo4j
 
 # Import Postgres Connector
-from dbconn import plugin_postgres as postgres
+from . import plugin_postgres as postgres
 
 # Import MongoDB Connector
-from dbconn import plugin_mongodb as mongodb
+from . import plugin_mongodb as mongodb
 
 # Import MySQL Connector
-#from dbconn import plugin_mysql
+#from . import plugin_mysql
 
 # Import error messages:
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # function that returns a generic connection object to the database (using one of the available plugins)
 # accept db connection parameters as a collection of keyword arguments
@@ -142,6 +142,39 @@ def get_db_cursor(conn, db_type):
             return neo4j.get_cursor(conn)
         elif db_type == 'elasticsearch':
             return es.get_cursor(conn)
+        else:
+            logging.error(erx.msg[1])
+            sys.exit(1)
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format
+                        (traceback.format_exc()))
+        sys.exit(1)
+
+# Function that closes a database cursor
+def close_db_cursor(cur, db_type):
+    """
+    Close Database Cursor
+    :param cur: Database Cursor Object
+    :param db_type: Database Type
+    :return: None
+    """
+    try:
+        if db_type is None:
+            db_type = 'none'
+        db_type = str(db_type).lower().strip(' ')
+        if db_type == 'none':
+            return None
+        elif db_type == 'snowflake':
+            sf.close_cursor(cur)
+        elif db_type == 'postgres':
+            postgres.close_cursor(cur)
+        #elif db_type == 'mysql':
+        #    mysql.close_cursor(cur)
+        elif db_type == 'neo4j':
+            neo4j.close_cursor(cur)
+        elif db_type == 'elasticsearch':
+            es.close_cursor(cur)
         else:
             logging.error(erx.msg[1])
             sys.exit(1)

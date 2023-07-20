@@ -17,10 +17,10 @@ import elasticsearch
 import elasticsearch.helpers
 
 # Import error messages
-from dbconn import error_msg as erx
+from . import error_msg as erx
 
 # Import utilities
-from dbconn import utilities as utils
+from . import utilities as utils
 
 # Function that returns a connection object for ElasticSearch database
 # and accept db connection parameters as a collection of keyword arguments
@@ -84,6 +84,20 @@ def get_cursor(conn):
         logging.error(erx.msg[0].format(str(e)))
         logging.error(erx.msg[0].format
                         (traceback.format_exc()))
+        sys.exit(1)
+
+# Function to close a Elasticsearch cursor
+def close_cursor(cur):
+    """
+    Close Elasticsearch Cursor
+    :param cur: Elasticsearch Cursor Object
+    :return: None
+    """
+    try:
+        cur.close()
+    except Exception as e:
+        logging.error(erx.msg[0].format(str(e)))
+        logging.error(erx.msg[0].format(traceback.format_exc()))
         sys.exit(1)
 
 # function that executes a query on the Elasticsearch database
