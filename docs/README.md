@@ -64,7 +64,7 @@ In case you do not wish to use the default `jobs` directory, you can specify a d
 microetl -j /path/to/jobs/directory
 ```
 
-For more details on how to create a YAML file that defines the pipeline, check [here](jobs_configuration_via_YAML.md).
+For more details on how to create a YAML file that defines the pipeline, check **[here](jobs_configuration_via_YAML.md)**.
 
 Each job file will be executed in series, so to create a pipeline, all you need to do is create multiple job files and call them in such a way that will order them in the way you want them to be executed.
 

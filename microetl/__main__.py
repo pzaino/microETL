@@ -17,10 +17,10 @@ import core as metl
 
 def main(argv):
   # Set the default paths:
-  base_path = os.getcwd()
-  cfg_path = os.path.join(base_path, 'jobs')
-  out_path = os.path.join(base_path, 'out_data')
-  inp_path = os.path.join(base_path, 'inp_data')
+  metl.base_path = os.getcwd()
+  metl.cfg_path = os.path.join(metl.base_path, 'jobs')
+  metl.out_path = os.path.join(metl.base_path, 'out_data')
+  metl.inp_path = os.path.join(metl.base_path, 'inp_data')
 
   opts, args = getopt.getopt(argv,"hj:b:",["help","jobs=","base=","inp=","out="])
   for opt, arg in opts:
@@ -28,18 +28,18 @@ def main(argv):
       print ('microetl -j <jobs_configs_path> -i <inp_data_path> -o <out_data_path> -b <base_path>')
       sys.exit()
     elif opt in ("-j", "--jobs"):
-      cfg_path = arg
+      metl.cfg_path = arg
     elif opt in ("-b", "--base"):
-      base_path = arg
+      metl.base_path = arg
     elif opt in ("-i", "--inp"):
-      inp_path = arg
+      metl.inp_path = arg
     elif opt in ("-o", "--out"):
-      out_path = arg
+      metl.out_path = arg
 
   # Load YAML test configuration:
-  for filename in os.listdir(cfg_path):
+  for filename in os.listdir(metl.cfg_path):
     if filename.lower().endswith('.yaml') or filename.lower().endswith('.yml'):
-      metl.etleng_run_pipeline_from_config(filename, str(base_path), str(cfg_path), str(inp_path), str(out_path))
+      metl.etleng_run_pipeline_from_config(filename, str(metl.base_path), str(metl.cfg_path), str(metl.inp_path), str(metl.out_path))
 
 if __name__ == "__main__":
     main(sys.argv[1:])

@@ -22,7 +22,9 @@ import re
 # and produce our ETL pipeline:
 import pandas as pd
 import numpy as np
-#importa jsonbender
+
+# Import jsonbender library to transform JSON data
+import jsonbender
 from jsonbender import bend, K, S, F, OptionalS, If, Switch, Alternation, Forall, list_ops, Reduce, Filter, FlatForall, Format
 
 # Import jsonschema library to validate JSON data
@@ -45,6 +47,8 @@ from jinja2.loaders import DictLoader
 # Import jinjaSQL library to allow for parameterized SQL queries
 from jinjasql import JinjaSql
 
+import pyjq
+
 #add the following from graphql_compiler import graphql_to_sql
 
 # Use dbconn.py to connect to a generic DB
@@ -56,6 +60,12 @@ import microetl.apiclient as apic
 
 # Globals
 debug_level = 1
+base_path: str = os.path.dirname(os.path.realpath(__file__))
+cfg_path: str = os.path.join(base_path, 'jobs')
+inp_path: str = os.path.join(base_path, 'inp_data')
+out_path: str = os.path.join(base_path, 'out_data')
+tmp_path: str = os.path.join(base_path, 'tmp_data')
+log_path: str = os.path.join(base_path, 'logs')
 
 # Error Messages
 err_msg = [
@@ -114,6 +124,46 @@ def do_nothing():
     """
     logging.debug("Not implemented yet!")
 
+# Function to process a variable containing a pyval:
+def process_pyexpr(var):
+    """
+    Process a variable containing a pyexpr
+    :param var: Python expression
+    :return: Processed variable
+    """
+    try:
+        pyval_prefix: str = 'pyexpr('
+        pyval_suffix: str = ')'
+        var = var.strip()
+        tmp_var = var.lower()
+        if tmp_var.startswith(pyval_prefix) and var.endswith(pyval_suffix):
+            return str(eval(var[7:-1]))
+        else:
+            return var
+    except Exception as e:
+        logging.error(err_msg[0].format(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return var
+
+# Generic function that reads a file:
+def read_file(filename):
+    """
+    Read a file
+    :param filename: Filename
+    :return: File content
+    """
+    try:
+        if filename != None and filename != '':
+            with open(filename, 'r') as file:
+                file_content = file.read()
+            return file_content
+        else:
+            return None
+    except Exception as e:
+        logging.error(err_msg[3] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+    
 # Function to read a JSON Schema
 def read_json_schema(json_schema_file):
     """
@@ -157,41 +207,49 @@ def read_config_file(config_file):
 
 # Function that takes microETL config, a datasource type and the input data path and returns data 
 # as required by the configuration
-def read_data_from_ds(config, datasource_type: str = 'file', input_data_path: str = '', section_name: str = 'source'):
+def read_data_from_ds(config, datasource_type: str = 'file', section_name: str = 'source'):
     """
     Read data from the datasource
     :param config: Configuration
     :param datasource_type: Datasource Type
-    :param input_data_path: Input Data Path
     :return: processed data
     """
     try:
+        if section_name == "source":
+            input_data_path: str = config.get("paths").get("inp_path")
+        elif section_name == "destination":
+            input_data_path: str = config.get("paths").get("out_path")
+        elif section_name == "transform":
+            input_data_path: str = config.get("paths").get("inp_path")
+        else:
+            input_data_path: str = config.get("paths").get("base_path")
+
         if datasource_type.lower().strip() == 'csv':
             data = pd.DataFrame()
             for filename in os.listdir(input_data_path):
                 if filename.lower().endswith('.csv'):
                     full_filename: str = os.path.join(input_data_path, filename)
-                    data += process_data(config, input_data_path, section_name, pd.read_csv(full_filename)) 
+                    data += process_data(config, input_data_path, section_name, config.get("actions").get(section_name), pd.read_csv(full_filename)) 
         elif datasource_type.lower().strip() == 'json':
             data = json.loads('')
             for filename in os.listdir(input_data_path):
                 if filename.lower().endswith('.json'):
                     full_filename: str = os.path.join(input_data_path, filename)
-                    data += process_data(config, input_data_path, section_name, pd.read_json(full_filename))
+                    data += process_data(config, input_data_path, section_name, config.get("actions").get(section_name), pd.read_json(full_filename))
         elif datasource_type.lower().strip() == 'excel':
             data = pd.DataFrame()
             for filename in os.listdir(input_data_path):
                 if filename.lower().endswith('.xlsx'):
                     full_filename: str = os.path.join(input_data_path, filename)
-                    data += process_data(config, input_data_path, section_name, pd.read_excel(full_filename))
+                    data += process_data(config, input_data_path, section_name, config.get("actions").get(section_name), pd.read_excel(full_filename))
         elif datasource_type.lower().strip() == 'api':
-            data = process_data(config, input_data_path, section_name, read_data_from_api(config, section_name))
+            data = process_data(config, input_data_path, section_name, config.get("actions").get(section_name), read_data_from_api(config, section_name))
         elif datasource_type.lower().strip() == 'file':
             data = ''
             for filename in os.listdir(input_data_path):
                 if filename != None and filename != '': 
                     full_filename: str = os.path.join(input_data_path, filename)
-                    tmp_data = process_data(config, input_data_path, section_name, read_data_from_file(full_filename))
+                    tmp_data = process_data(config, input_data_path, section_name, config.get("actions").get(section_name), read_data_from_file(full_filename))
                     if tmp_data != None and tmp_data != '':
                         data += str(tmp_data)
         else:
@@ -446,7 +504,7 @@ def process_config_parameters(config, inp_path, section_name, parameters):
     """
     try:
         tmp_pars = parameters
-        if config.get('actions').get(section_name).get('parameters') != None:
+        if parameters != None:
             # Loop through the parameters
             for parameter in parameters:
                 if parameter.get('name').lower().strip() == 'parameters_file' or parameter.get('name').lower().strip() == 'file':
@@ -475,26 +533,29 @@ def process_config_parameters(config, inp_path, section_name, parameters):
         return parameters
 
 # Function that takes a configuration and a data unit and processes it according to the configuration
-def process_data(config, inp_path, sect_name, data):
+def process_data(config, inp_path, sect_name, action, data):
     """
     Process the Data
     :param config: Configuration
     :param inp_path: Input Path
-    :param sect_name: Section Name of the config where to find the parameters
+    :param sect_name: Section Name (within the action) of the config where to find the parameters
+    :param action: Action (a specific section of the job config)
     :param data: Data
     :return: Processed Data
     """
     try:
         # Get the Actions
-        actions = config.get('actions').get(sect_name)
+        #actions = config.get('actions').get(sect_name)
         # Get the Action Type
-        action_type = actions.get('action_type')
+        action_type = action.get('type').lower().strip()
         if action_type == None:
-            action_type = 'no_action'
+            return data
+        
         # Get the Action Parameters
-        parameters = actions.get('parameters')
+        parameters = action.get('parameters')
         # Get the Action Parameters
         parameters = process_config_parameters(config, inp_path, sect_name, parameters)
+
         # Process the Action
         if action_type == 'filter':
             data = filter_data(data, parameters)
@@ -507,19 +568,25 @@ def process_data(config, inp_path, sect_name, data):
         elif action_type == 'join':
             data = join_data(data, parameters)
         elif action_type == 'write':
-            write_data_to_ds(config, data, parameters)
+            write_data_to_ds(config, action.get('location'), data, parameters)
         elif action_type == 'read':
-            data = read_data_from_ds(config, parameters.get('datasource_type'), parameters.get('input_data_path'), sect_name)
+            data = read_data_from_ds(config, action.get('location'), sect_name)
         elif action_type == 'sql':
             query, query_params = replace_sql_parameters(config, inp_path, read_sql_query(parameters.get('sql_query_file')), sect_name, parameters)
             data = read_data_from_db(config, query, query_params)
+        elif action_type == 'dsl':
+            data = transform_data_json_to_json(data, read_file(os.path.join(process_pyexpr(action.get("template_path", '')), action.get("template"))), read_file(os.path.join(process_pyexpr(action.get("schema_path", '')), action.get("schema", ''))))
+        elif action_type == 'jq':
+            data = transform_data_json_to_json_pyjq(data, read_file(os.path.join(process_pyexpr(action.get("template_path", '')), action.get("template"))), read_file(os.path.join(process_pyexpr(action.get("schema_path", '')), action.get("schema", ''))))
+        elif action_type == 'print':
+            print("-- Data (in process_data):")
+            print(data)
+            print("--")
         elif action_type == 'api':
             data = read_data_from_api(config, parameters.get('input_data_path'))
-        elif action_type == 'no_action':
-            return data
         else:
             logging.error(err_msg[14] + "Invalid action type: " + str(action_type))
-            return None
+            return data
         
         return data
     except Exception as e:
@@ -745,8 +812,61 @@ def join_data(data, parameters):
         logging.error(err_msg[0].format(traceback.format_exc()))
         return None
 
+# Function that prints data
+def print_data(data):
+    """
+    Print the Data
+    :param data: Data
+    :return: None
+    """
+    try:
+        # Print the Data
+        print(data)
+
+    except Exception as e:
+        logging.error(err_msg[16] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return None
+
+# This function reads data as an argument and transforms it according to the provided MicroETL configuration
+def transform_data(config, data, section_name: str ="transform"):
+    """
+    Transform the Data
+    :param config: Configuration
+    :param data: Data
+    :param section_name: Section Name
+    :return: Transformed Data
+    """
+    try:
+        # Get the Transform Section
+        transform_section = config.get('actions').get(section_name)
+        # Get the Transform sequence
+        transform_sequence = transform_section.get('sequence')
+
+        # Loop through the Transform sequence
+        for transform in transform_sequence:
+            if debug_level > 1:
+              print(yaml.dump(transform))
+            # Get subsection
+            #transform_step = transform.get('step')
+            # Get the Transform name
+            transform_type: str = transform.get("type").lower().strip()
+            # Process the Data
+            data = process_data(config, transform.get('inp_path'), transform_type, transform, data)
+            # Check if the data is empty
+            if data == None:
+                logging.error(err_msg[0].format("Empty data after transform: " + transform_type))
+                return None
+            
+        return data
+    except Exception as e:
+        logging.error(err_msg[0].format(str(e)))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return data
+
+
 # Function that writes data to a datasource according to the provided MicroETL configuration
-def write_data_to_ds(config, data, parameters):
+def write_data_to_ds(config, out_path, data, parameters):
     """
     Write the Data
     :param config: Configuration
@@ -869,7 +989,7 @@ def transform_data_old_to_new(data, old_json_schema, json_schema):
 
 # Function that transform the data from JSON format to JSON format using jsonbender 
 # and return the transformed Data as a JSON object
-def transform_data_json_to_json(data, mapping, json_schema):
+def transform_data_json_to_json(data, mapping, json_schema = None):
     """
     Transform the Data from JSON format to JSON format using jsonbender
     :param data: Data from the Database (in JSON format!)
@@ -878,13 +998,76 @@ def transform_data_json_to_json(data, mapping, json_schema):
     :return: Transformed Data
     """
     try:
-        new_data = bend(mapping, data)
-        validate_data(new_data, json_schema)
+        # Process the mapping. 
+        # Paolo's note: this is a micro parser for the DSL
+        #               when using DSL from a text file!
+        if type(mapping) == str:
+            processed_map = {}
+            pattern = r"^.*[\'|\"]{1}(?P<key>[a-zA-Z0-9]+)[\'|\"]{1}\s*[\:]{1}\s*(?P<value>.*)\s*[,]{1}\s*$"
+            line = ''
+            for char in mapping:
+                if char == '\n':
+                    if line.strip() != '':
+                        matches = re.match(pattern, line, flags=re.I|re.M|re.U)
+                        if matches:
+                            processed_map[matches.group("key")] = eval(matches.group("value"))
+                    line = ''
+                else:
+                    line += char
+        else:
+            processed_map = mapping
+
+        # Remap the data:    
+        new_data = bend(processed_map, data)
+
+        if json_schema != None:
+            valid = validate_data(new_data, json_schema)
+            if not valid:
+                raise ValidationError("The data is not valid according to the JSON Schema")
+            
         return new_data
     except Exception as e:
         logging.error(err_msg[10] + str(e))
         logging.error(err_msg[0].format(traceback.format_exc()))
-        sys.exit(1)
+        return data
+
+# This function transforms the data from JSON format "A" to JSON format "B" using pyjq
+# and a simple mapping of JSON "A" to JSON "B" and return the transformed Data as a JSON object
+def transform_data_json_to_json_pyjq(data, mapping, json_schema):
+    """
+    Transform the Data from JSON format to JSON format using pyjq
+    :param data: Data from the Database (in JSON format!)
+    :param mapping: Mapping (a DSL for transforming JSON objects)
+    :param json_schema: JSON Schema
+    :return: Transformed Data
+    """
+    try:
+        # if either data or mapping is None, skip this "step"
+        if data == None or mapping == None:
+            return data
+        
+        # Process the mapping
+        # TBD
+
+        tmp_data = '{ "source": ' + str(data) + '}'
+        print("tmp_data: " + tmp_data)
+        data_json = json.loads( tmp_data )
+        print(json.dumps(data_json, indent=4))
+
+        # Transform the data
+        new_data = pyjq.all(mapping, data_json)
+
+        # Validate the data if a JSON Schema is provided
+        if json_schema != None and new_data != None:
+            valid = validate_data(new_data, json_schema)
+            if not valid:
+                raise ValidationError("The data is not valid according to the JSON Schema")
+
+        return new_data
+    except Exception as e:
+        logging.error(err_msg[10] + str(e))
+        logging.error(err_msg[0].format(traceback.format_exc()))
+        return data
 
 # Function that transform a GraphQL query into an SQL query
 #def transform_graphql_to_sql(graphql_query, sql_schema_info, parameters, db_type):
@@ -1053,17 +1236,17 @@ def etleng_df_to_json(df, json_schema_file):
         sys.exit(1)
 
 # Function that runs the ETL pipeline
-def etleng_run_pipeline(config, inp_path, out_path):
+def etleng_run_pipeline(config):
     """
     Run the ETL Pipeline
-    :param config: Configuration
-    :param inp_path: Input Data path (if any)
-    :param out_path: Output Data path (if any)
+    :param config: Job configuration file
     :return: None
     """
     
     try:
         # Process configuration file
+        inp_path: str = config.get('paths').get('inp_path')
+        out_path: str = config.get('paths').get('out_path')
         src_ds: str = ''
         src_ds = str(config.get('datasources').get('source').get('type' , ''))
         if src_ds == '':
@@ -1083,13 +1266,19 @@ def etleng_run_pipeline(config, inp_path, out_path):
             raise ValueError('No destination data type specified in the configuration file')
 
         # Read the Data from the Source
-        data = read_data_from_ds(config, str(src_ds), str(inp_path), "source")
+        data = read_data_from_ds(config, str(src_ds), "source")
         if debug_level > 0:
             print("-- Data from source (in etleng_run_pipeline):")
             print(data)
             print("--")
 
         # Transform the Data to the new format:
+        if config.get("actions").get("transform") != None:
+            data = transform_data(config, data, "transform")
+            if debug_level > 0:
+                print("-- Data from transform (in etleng_run_pipeline):")
+                print(data)
+                print("--")
 
         # if config['old_json_schema'] != '':
         #     data = transform_data_old_to_new(data, old_json_schema, json_schema)
@@ -1133,8 +1322,21 @@ def etleng_run_pipeline_from_config(config_file, base_path: str, cfg_path: str, 
         # Check if the output path is provided in the configuration file
         if config.get('datasources').get('destination').get('local_output_data') != None:
             out_path = str(config.get('datasources').get('destination').get('local_output_data'))
+
+        paths = {
+                "base_path": base_path,
+                "cfg_path": cfg_path,
+                "inp_path": inp_path,
+                "out_path": out_path
+        }
+
+        config["paths"] = paths
+
+        if debug_level > 1:
+            print(yaml.dump(config, default_flow_style=False))
+
         # Run the ETL Pipeline
-        return etleng_run_pipeline(config, inp_path, out_path)
+        return etleng_run_pipeline(config)
 
     except Exception as e:
         logging.error(err_msg[15] + str(e))

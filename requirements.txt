@@ -11,5 +11,6 @@ neo4j==5.10.0
 elasticsearch==8.8.2
 psycopg2==2.9.6
 pymongo==4.4.0
+pyjq==2.6.0
 snowflake_connector_python==3.0.4
 #MySQL-python==1.2.5
