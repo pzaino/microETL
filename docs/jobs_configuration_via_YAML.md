@@ -4,6 +4,26 @@
 
 MicroETL jobs (or pipeline steps) can be defined using YAML files. A YAML file is a file that contains a sequence of steps that are executed in a specific order. Each step is defined by a set of parameters that are used to configure the step. The parameters are defined using a YAML syntax.
 
+Each YAML job configuration file presents 3 distinct sections:
+
+1) Fetch
+2) Transform
+3) Push
+
+The Fetch step is used to fetch data from a data source. The Transform step is used to transform the data. The Push step is used to push the data to a data destination.
+
+The "fetch" step is represented by the key "source" in the YAML file. The "transform" step is represented by the key "transform" in the YAML file. The "push" step is represented by the key "destination" in the YAML file.
+
+While the "Transform" section is optional, the "Fetch" and "Push" steps are required. The "Transform" section can be divided in many steps, each one of them is a single transformation action.
+
+Source and Destination also have the extra configuration of datasources, which are the data sources and destinations that will be used by the steps.
+
+A simple pipeline is represented by a single YAML job file, while, a more complex pipeline is represented by a sequence of YAML files. Each YAML file represents a step in the pipeline.
+
+In most cases a simple pipeline will suffice, but in some cases you may need to create a more complex pipeline. For example, you may need to create a pipeline that fetches data from multiple data sources, transforms the data, and then pushes the data to multiple data destinations.
+
+## YAML Job Configuration
+
 MicroETL yaml jobs support the concept of templating via JINJA, which means you can create YAML templates that can be used to transform data. This is a very powerful feature, as it allows you to use YAML to transform data in a variety of ways.
 
 Here is an example:
@@ -47,6 +67,15 @@ actions:
       - name: parameters_file
         value: {{ source_parameters_file }}
         type: file
+  transform:
+    sequence:
+      - step: "transform 001"
+        type: jq
+        template: {{ transform_template_jq }}
+        RootElement: {{ transform_root_element }}
+        template_path: {{ transform_template_path }}
+      - step: "transform 002"
+        type: print
   destination:
     name: DataStoreSQLQuery
     description: "Convert source query results and store them in destination using an SQL query template and parameters"
@@ -161,6 +190,10 @@ user: postgres
 password: postgres
 ```
 
+> ℹ **Note**:
+>
+> Datasources, can take user and password fields empty and, if provided empty, MicroETL will try to get them from the OS environment variables. If provided directly in the job YAML file they can also be populated using jinja and, in this case, the user can decide the name of an OS environment variable to use to populate the field.
+
 We'll get:
 
 ```yaml
@@ -173,9 +206,11 @@ source:
   password: postgres
 ```
 
-> ℹ **Please note**: At this time is not possible to use jinja templating in if the YAML fragments that gets included in our main job YAML file.
+> ℹ **Please note**: At this time is not possible to use jinja templating in YAML fragments that gets included in our main job YAML file.
 
 #### Recursive
+
+Inclusion can be set to be recursive. In this case, all files matching the pattern will be included.
 
 > ℹ **Note**:
 >
