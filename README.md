@@ -54,6 +54,12 @@ MicroETL is released under CDDL v1.1 license, so everyone can contribute to make
 
 CDDL v1.1
 
+If you're not familiar with the CDDL v1.1 license, please check [this](https://fossa.com/blog/open-source-licenses-101-cddl-common-development-distribution-license/) link for more "human readable" info.
+
+In very short terms the CDDL v1.1 is a weak copyleft license which allows you to link my work with copyrighted source, however, if you modify my work (or improve it) you still need to release your changes under CDDL v1.1 and therefore make your changes available to everyone to benefit. That does NOT include your software that may be using my work, only the improvements you've made to my work.
+
+Also, obviously, you cannot claim it's your work, you must always give credit to the original author (me) and all the folks that have contributed to this project.
+
 ## Acknowledgements
 
 Given that MicroETL is mostly a "process" that uses other libraries, I would like to thank the authors of the following libraries:
