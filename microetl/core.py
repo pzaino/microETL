@@ -33,7 +33,7 @@ import json
 import jsonschema
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
-#importa boto3
+# TODO: import boto3
 
 # Import yaml library to read and write YAML data
 import yaml
@@ -1001,7 +1001,7 @@ def transform_data_json_to_json(data, mapping, json_schema = None):
         # Process the mapping. 
         # Paolo's note: this is a micro parser for the DSL
         #               when using DSL from a text file!
-        if type(mapping) == str:
+        if isinstance(mapping, str):
             processed_map = {}
             pattern = r"^.*[\'|\"]{1}(?P<key>[a-zA-Z0-9]+)[\'|\"]{1}\s*[\:]{1}\s*(?P<value>.*)\s*[,]{1}\s*$"
             line = ''
