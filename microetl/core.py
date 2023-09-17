@@ -1071,25 +1071,25 @@ def transform_data_json_to_json_pyjq(data, mapping, json_schema):
 
 # Function that transform a GraphQL query into an SQL query
 #def transform_graphql_to_sql(graphql_query, sql_schema_info, parameters, db_type):
-    """
-    Transform a GraphQL query into an SQL query
-    :param graphql_query: GraphQL Query
-    :param sql_schema_info: SQL Schema information
-    :param parameters: Parameters (if any)
-    :return: SQL Query
-    """
-    try:
-        # Set the compiler metadata
-        compiler_metadata = {
-            "dialect": db_type,
-        }
-        # Transform the GraphQL query into an SQL query
-        sql_query = graphql_to_sql(sql_schema_info, graphql_query, parameters, compiler_metadata)
-        return sql_query
-    except Exception as e:
-        logging.error(err_msg[4] + str(e))
-        logging.error(err_msg[0].format(traceback.format_exc()))
-        sys.exit(1)
+#    """
+#    Transform a GraphQL query into an SQL query
+#    :param graphql_query: GraphQL Query
+#    :param sql_schema_info: SQL Schema information
+#    :param parameters: Parameters (if any)
+#    :return: SQL Query
+#    """
+#    try:
+#        # Set the compiler metadata
+#        compiler_metadata = {
+#            "dialect": db_type,
+#        }
+#        # Transform the GraphQL query into an SQL query
+#        sql_query = graphql_to_sql(sql_schema_info, graphql_query, parameters, compiler_metadata)
+#        return sql_query
+#    except Exception as e:
+#        logging.error(err_msg[4] + str(e))
+#        logging.error(err_msg[0].format(traceback.format_exc()))
+#        sys.exit(1)
 
 # Function that validates a JSON Schema
 def validate_json_schema(json_schema):
