@@ -1,0 +1,21 @@
+{
+    "cSpell.words": [
+        "apic",
+        "apiclient",
+        "boto",
+        "dataframe",
+        "dbconn",
+        "etleng",
+        "Forall",
+        "isin",
+        "jsonbender",
+        "jsonschema",
+        "levelname",
+        "microetl",
+        "nunique",
+        "pyexpr",
+        "pyjq",
+        "pyval",
+        "templating"
+    ]
+}
