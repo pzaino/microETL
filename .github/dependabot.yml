@@ -6,22 +6,20 @@
 version: 2
 updates:
   # GitHub Actions updates
-  - package-ecosystem: github-actions
-    directory: /
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: daily
-    target:
-      branch: "develop"
+      interval: "daily"
 
+  
   # Python dependencies updates
-  - package-ecosystem: pip
-    directory: /
+  - package-ecosystem: "pip"
+    directory: "/"
     schedule:
-      interval: daily
-    target:
-      branch: "develop"
+      interval: "daily"
     open-pull-requests-limit: 10
-    rebase-strategy: auto
+    rebase-strategy: "auto"
     commit-message:
       prefix: "deps"
       include: "scope"
+
