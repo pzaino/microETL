@@ -6,7 +6,7 @@ jinjasql==0.1.8
 JSONBender==0.9.3
 jsonschema==4.18.3
 numpy==1.25.1
-pandas==1.4.2
+pandas==2.2.2
 neo4j==5.10.0
 elasticsearch==8.8.2
 psycopg2==2.9.6
