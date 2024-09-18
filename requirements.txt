@@ -9,7 +9,7 @@ numpy==1.25.1
 pandas==2.2.2
 neo4j==5.10.0
 elasticsearch==8.8.2
-psycopg2==2.9.6
+psycopg2==2.9.9
 pymongo==4.4.0
 pyjq==2.6.0
 snowflake_connector_python==3.12.2
