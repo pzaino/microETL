@@ -7,7 +7,7 @@ JSONBender==0.9.3
 jsonschema==4.23.0
 numpy==2.1.1
 pandas==2.2.2
-neo4j==5.10.0
+neo4j==5.24.0
 elasticsearch==8.8.2
 psycopg2==2.9.9
 pymongo==4.9
