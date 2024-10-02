@@ -10,7 +10,7 @@ pandas==2.2.3
 neo4j==5.25.0
 elasticsearch==8.15.1
 psycopg2==2.9.9
-pymongo==4.10.0
+pymongo==4.10.1
 pyjq==2.6.0
 snowflake_connector_python==3.12.2
 #MySQL-python==1.2.5
