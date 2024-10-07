@@ -5,7 +5,7 @@ jinja2==3.0
 jinjasql==0.1.8
 JSONBender==0.9.3
 jsonschema==4.23.0
-numpy==2.1.1
+numpy==2.1.2
 pandas==2.2.3
 neo4j==5.25.0
 elasticsearch==8.15.1
