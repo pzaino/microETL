@@ -1,7 +1,7 @@
 boto3==1.37.17
 PyYAML==6.0.2
 pyyaml-include==1.3.1
-jinja2==3.0
+jinja2==3.1.6
 jinjasql==0.1.8
 JSONBender==0.9.3
 jsonschema==4.23.0
